@@ -1,14 +1,38 @@
 import { test, expect } from "@playwright/test";
 
-test("شاشة البداية تنتهي تلقائيًا أو عند النقر على تخطي", async ({ page }) => {
+test("شاشة البداية تنتهي تلقائيًا أو عند النقر على تخطي", async ({ page, isMobile }) => {
   await page.goto("/");
   const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
   await expect(splash).toBeVisible({ timeout: 5000 });
-  const skipBtn = page.getByRole("button", { name: "تخطي الفيديو" });
-  if (await skipBtn.isVisible()) {
-    await skipBtn.click();
+
+  if (isMobile) {
+    const video = page.locator(".splash video");
+    await expect(video).toHaveCount(1);
+    await expect(page.locator(".splash button")).toHaveCount(0);
+    await expect(page.locator(".splash").getByText("مرتب")).toHaveCount(0);
+    await expect(page.locator(".splash").getByText(/جدولك الجامعي/)).toHaveCount(0);
+
+    await page.waitForFunction(() => {
+      const v = document.querySelector(".splash video") as HTMLVideoElement | null;
+      return v && !v.paused && v.currentTime > 0 && v.duration >= 3.8;
+    }, { timeout: 4000 });
+
+    const playback = await video.evaluate((v: HTMLVideoElement) => ({
+      paused: v.paused,
+      currentTime: v.currentTime,
+      duration: v.duration
+    }));
+    expect(playback.paused).toBe(false);
+    expect(playback.currentTime).toBeGreaterThan(0);
+    expect(playback.duration).toBeGreaterThanOrEqual(3.8);
+  } else {
+    const skipBtn = page.getByRole("button", { name: "تخطي الفيديو" });
+    if (await skipBtn.isVisible()) {
+      await skipBtn.click();
+    }
   }
-  await expect(splash).toBeHidden({ timeout: 5000 });
+
+  await expect(splash).toBeHidden({ timeout: 8000 });
 });
 
 test("onboarding ثم إضافة مادة وتعديلها وحذفها", async ({ page }) => {
@@ -17,7 +41,7 @@ test("onboarding ثم إضافة مادة وتعديلها وحذفها", async 
   if (await splash.isVisible()) {
     const skipBtn = page.getByRole("button", { name: "تخطي الفيديو" });
     if (await skipBtn.isVisible()) await skipBtn.click();
-    await expect(splash).toBeHidden({ timeout: 6000 });
+    await expect(splash).toBeHidden({ timeout: 8000 });
   }
 
   await expect(page.getByText("لنرتّب فصلك الدراسي")).toBeVisible({ timeout: 10000 });

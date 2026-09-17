@@ -1,1 +1,90 @@
-.splash{padding:24px}.splash video,.splash-poster{width:min(300px,70vw);aspect-ratio:9/16;object-fit:cover;border-radius:22px}.splash-poster{display:grid;place-items:center;background:color-mix(in srgb,var(--primary-foreground),transparent 88%)}.splash .brand-mark{display:block}.splash-skip{margin-top:14px}
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  color: var(--foreground);
+  text-align: center;
+}
+
+/* Mobile Fullscreen Video Splash (Full Viewport, 100dvh, Video Only) */
+.splash.splash-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 50;
+  overflow: hidden;
+  background: #0d0809;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: block;
+}
+
+.splash.splash-fullscreen video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #0d0809;
+}
+
+/* Fallback centered logo for reduced-motion or video error */
+.splash.splash-fallback {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  margin: 0;
+  padding: 0;
+}
+
+.splash.splash-fallback .splash-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  object-fit: contain;
+  box-shadow: 0 12px 32px rgba(122, 24, 39, 0.16);
+  display: block;
+}
+
+/* Desktop Splash */
+.splash.splash-desktop {
+  padding: 24px;
+}
+
+.splash.splash-desktop .splash-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 360px;
+  width: 100%;
+  animation: fadeIn 0.25s ease;
+}
+
+.splash.splash-desktop .splash-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  object-fit: contain;
+  box-shadow: 0 12px 32px rgba(122, 24, 39, 0.16);
+  display: block;
+}

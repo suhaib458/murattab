@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { ttuConfig } from "@/config/ttu";
 import { makeBackup, readBackup } from "@/domain/backup";
@@ -76,10 +76,12 @@ export function MurattabApp() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = async () => setData(await repo.snapshot());
-  const dismissSplash = () => {
-    sessionStorage.setItem("murattab-splash", "1");
+  const dismissSplash = useCallback(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("murattab-splash", "1");
+    }
     setShowSplash(false);
-  };
+  }, []);
 
   useEffect(() => {
     void repo
@@ -92,6 +94,24 @@ export function MurattabApp() {
 
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js");
+    } else if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          void reg.unregister().then((ok) => {
+            if (ok) console.warn("[Murattab Dev] Unregistered stale service worker:", reg.scope);
+          });
+        }
+      }).catch((err) => console.error("Error unregistering service workers:", err));
+
+      if ("caches" in window) {
+        void caches.keys().then((keys) => {
+          for (const key of keys) {
+            void caches.delete(key).then(() => {
+              console.warn("[Murattab Dev] Cleared stale cache:", key);
+            });
+          }
+        }).catch((err) => console.error("Error clearing caches:", err));
+      }
     }
 
     const update = () => setOnline(navigator.onLine);
@@ -101,12 +121,6 @@ export function MurattabApp() {
     if (!sessionStorage.getItem("murattab-splash")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowSplash(true);
-      const id = setTimeout(dismissSplash, 3500);
-      return () => {
-        clearTimeout(id);
-        window.removeEventListener("online", update);
-        window.removeEventListener("offline", update);
-      };
     }
 
     return () => {
@@ -247,64 +261,177 @@ export function MurattabApp() {
   );
 }
 
+type DeviceMode = "unknown" | "mobile" | "desktop";
+
+function subscribeToViewport(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const smallQuery = window.matchMedia("(max-width: 768px)");
+  const standaloneQuery = window.matchMedia("(display-mode: standalone)");
+  smallQuery.addEventListener("change", callback);
+  standaloneQuery.addEventListener("change", callback);
+  window.addEventListener("resize", callback);
+  return () => {
+    smallQuery.removeEventListener("change", callback);
+    standaloneQuery.removeEventListener("change", callback);
+    window.removeEventListener("resize", callback);
+  };
+}
+
+function getSmallViewportSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 768px)").matches || window.innerWidth <= 768;
+}
+
+function getStandaloneSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((window.navigator as unknown as { standalone?: boolean }).standalone)
+  );
+}
+
+function subscribeToReducedMotion(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  motionQuery.addEventListener("change", callback);
+  return () => motionQuery.removeEventListener("change", callback);
+}
+
+function getReducedMotionSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 function Splash({ onDismiss }: { onDismiss: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [reducedMotion, setReducedMotion] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  });
   const [videoFailed, setVideoFailed] = useState(false);
 
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
+  const smallViewport = useSyncExternalStore(
+    subscribeToViewport,
+    getSmallViewportSnapshot,
+    () => false
+  );
+
+  const standalone = useSyncExternalStore(
+    subscribeToViewport,
+    getStandaloneSnapshot,
+    () => false
+  );
+
+  const prefersReducedMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    getReducedMotionSnapshot,
+    () => false
+  );
+
+  const deviceMode: DeviceMode = !isClient
+    ? "unknown"
+    : smallViewport || standalone
+      ? "mobile"
+      : "desktop";
+
+  const shouldPlayVideo = deviceMode === "mobile" && !prefersReducedMotion && !videoFailed;
+
+  const renderBranch: "video" | "logo" | "unknown" =
+    deviceMode === "unknown"
+      ? "unknown"
+      : shouldPlayVideo
+        ? "video"
+        : "logo";
+
+  // Quick transition for Desktop, Reduced Motion, or Video Failure (1000ms)
+  // Automatically clears if deviceMode transitions to "mobile"
   useEffect(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(query.matches);
-    query.addEventListener("change", update);
+    if (deviceMode !== "desktop" && !prefersReducedMotion && !videoFailed) return;
+
+    const timer = setTimeout(onDismiss, 1000);
+    return () => clearTimeout(timer);
+  }, [deviceMode, prefersReducedMotion, videoFailed, onDismiss]);
+
+  // Safety fallback timeout for mobile video in case it stalls or fails to end
+  useEffect(() => {
+    if (!shouldPlayVideo) return;
+
+    const safetyTimer = setTimeout(() => {
+      onDismiss();
+    }, 6000);
+    return () => clearTimeout(safetyTimer);
+  }, [shouldPlayVideo, onDismiss]);
+
+  // Ensure mobile video starts playback automatically
+  useEffect(() => {
+    if (!shouldPlayVideo) return;
 
     const video = videoRef.current;
-    return () => {
-      query.removeEventListener("change", update);
-      if (video) {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-      }
-    };
-  }, []);
+    if (video) {
+      void video.play().catch((err: unknown) => {
+        console.warn("[Murattab] Splash video play interrupted:", err);
+      });
+    }
+  }, [shouldPlayVideo]);
+
+  if (renderBranch === "video") {
+    return (
+      <div className="splash splash-fullscreen" role="dialog" aria-modal="true" aria-label="شاشة بدء مرتب">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          src="/brand/splash.mp4"
+          aria-label="فيديو هوية مرتب"
+          onEnded={onDismiss}
+          onError={(e) => {
+            const err = e.currentTarget.error;
+            console.error("[Murattab Splash Video Error]", {
+              code: err?.code,
+              message: err?.message,
+              networkState: e.currentTarget.networkState,
+              readyState: e.currentTarget.readyState,
+              currentSrc: e.currentTarget.currentSrc
+            });
+            setVideoFailed(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (deviceMode === "mobile") {
+    return (
+      <div className="splash splash-fallback" role="dialog" aria-modal="true" aria-label="شاشة بدء مرتب">
+        <Image
+          src="/brand/logo.png"
+          alt="شعار مرتب"
+          className="splash-logo"
+          width={120}
+          height={120}
+          priority
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="splash" role="dialog" aria-modal="true" aria-label="شاشة بدء مرتب">
+    <div className="splash splash-desktop" role="dialog" aria-modal="true" aria-label="شاشة بدء مرتب">
       <div className="splash-content">
-        {reducedMotion || videoFailed ? (
-          <Image
-            src="/brand/logo.png"
-            alt="شعار مرتب"
-            className="splash-logo"
-            width={130}
-            height={130}
-            priority
-          />
-        ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            preload="auto"
-            poster="/brand/logo.png"
-            src="/brand/splash.mp4"
-            aria-label="فيديو هوية مرتب"
-            onEnded={onDismiss}
-            onError={() => setVideoFailed(true)}
-            onCanPlay={(event) => {
-              void event.currentTarget.play().catch(() => setVideoFailed(true));
-            }}
-          />
-        )}
+        <Image
+          src="/brand/logo.png"
+          alt="شعار مرتب"
+          className="splash-logo"
+          width={120}
+          height={120}
+          priority
+        />
         <h1>مرتب</h1>
         <p className="muted">جدولك الجامعي، أوضح وأقرب إليك.</p>
-        <button className="button secondary splash-skip" onClick={onDismiss}>
-          تخطي الفيديو
-        </button>
       </div>
     </div>
   );
