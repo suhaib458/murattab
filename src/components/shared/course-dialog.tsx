@@ -222,7 +222,7 @@ export function CourseDialog({
           </label>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input type="checkbox" {...register("reminder")} /> تفعيل تنبيه داخل ملف التقويم (ICS)
+            <input type="checkbox" {...register("reminder")} /> تفعيل التنبيه قبل المحاضرة
           </label>
 
           <button className="button" disabled={isSubmitting}>
