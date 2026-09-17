@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   isSupportedMimeType,
   RawExtractionResponseSchema,
@@ -12,7 +12,8 @@ import {
 } from "@/domain/ai/normalizer";
 import { DEFAULT_GEMINI_MODEL, GeminiScheduleExtractor } from "@/domain/ai/gemini-extractor";
 import { LocalScheduleRepository } from "@/storage/local-repository";
-import type { Course, ClassSession } from "@/domain/models";
+import { POST, setTestScheduleExtractor } from "@/app/api/schedule/extract/route";
+import type { Course, ClassSession, ScheduleExtractor } from "@/domain/models";
 
 describe("Smart Schedule Import - File & Schema Validation", () => {
   it("validates supported MIME types correctly", () => {
@@ -575,6 +576,192 @@ describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", ()
     ).rejects.toThrow("AI_PROVIDER_TIMEOUT");
 
     expect(callCount).toBeLessThan(3);
+  });
+});
+
+describe("Smart Schedule Import - Timeout Budget (3-attempt policy must actually run)", () => {
+  const originalEnv = process.env.AI_PROVIDER_TIMEOUT_MS;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.AI_PROVIDER_TIMEOUT_MS;
+    } else {
+      process.env.AI_PROVIDER_TIMEOUT_MS = originalEnv;
+    }
+  });
+
+  it("three consecutive 503 responses are classified as GEMINI_SERVICE_UNAVAILABLE, not AI_PROVIDER_TIMEOUT", async () => {
+    let callCount = 0;
+    const mockFetch503 = (async () => {
+      callCount++;
+      return new Response("High demand", { status: 503, headers: { "Content-Type": "text/plain" } });
+    }) as typeof fetch;
+
+    // Use a generous budget so all 3 attempts can run. This mirrors the
+    // production default (60_000 ms) and proves the budget is no longer
+    // cutting off attempt 3.
+    const extractor = new GeminiScheduleExtractor({
+      apiKey: "test-key",
+      fetchFn: mockFetch503,
+      retryDelaysMs: [1, 1],
+      timeoutMs: 60_000
+    });
+
+    await expect(
+      extractor.extract({
+        fileName: "schedule.png",
+        bytes: new Uint8Array([1, 2, 3])
+      })
+    ).rejects.toThrow("GEMINI_SERVICE_UNAVAILABLE");
+
+    // Crucially, all 3 attempts must have been allowed to run.
+    expect(callCount).toBe(3);
+  });
+
+  it("a truly hanging provider (fetch never resolves) is classified as AI_PROVIDER_TIMEOUT", async () => {
+    // fetch that never resolves until the test ends — we abort it via the
+    // extractor-internal budget.
+    const mockFetchHang = (async (_url: string | URL | Request, init?: RequestInit) => {
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal | undefined;
+        if (!signal) return;
+        signal.addEventListener("abort", () => {
+          const err: any = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    }) as typeof fetch;
+
+    // Tiny budget: 30 ms total. This is the "real timeout" path.
+    const extractor = new GeminiScheduleExtractor({
+      apiKey: "test-key",
+      fetchFn: mockFetchHang,
+      retryDelaysMs: [1, 1],
+      timeoutMs: 30
+    });
+
+    await expect(
+      extractor.extract({
+        fileName: "schedule.png",
+        bytes: new Uint8Array([1, 2, 3])
+      })
+    ).rejects.toThrow("AI_PROVIDER_TIMEOUT");
+  });
+
+  it("internal timeout firing during inter-attempt backoff aborts retries and surfaces as AI_PROVIDER_TIMEOUT", async () => {
+    let callCount = 0;
+    const mockFetch = (async () => {
+      callCount++;
+      return new Response("Busy", { status: 503 });
+    }) as typeof fetch;
+
+    // Tiny overall budget: the first attempt fires, then the timer
+    // should fire DURING the second-attempt backoff sleep, aborting the
+    // loop before a 3rd fetch can occur.
+    const extractor = new GeminiScheduleExtractor({
+      apiKey: "test-key",
+      fetchFn: mockFetch,
+      retryDelaysMs: [200, 200],
+      timeoutMs: 30
+    });
+
+    await expect(
+      extractor.extract({
+        fileName: "schedule.png",
+        bytes: new Uint8Array([1, 2, 3])
+      })
+    ).rejects.toThrow("AI_PROVIDER_TIMEOUT");
+
+    // The loop must not have run all 3 attempts — the budget fired.
+    expect(callCount).toBeLessThan(3);
+  });
+
+  it("resolveProviderTimeoutMs honors AI_PROVIDER_TIMEOUT_MS env var", async () => {
+    process.env.AI_PROVIDER_TIMEOUT_MS = "12345";
+    const { resolveProviderTimeoutMs } = await import("@/domain/ai/gemini-extractor");
+    expect(resolveProviderTimeoutMs()).toBe(12345);
+  });
+
+  it("resolveProviderTimeoutMs defaults to 60_000 when env is unset and no option is given", async () => {
+    delete process.env.AI_PROVIDER_TIMEOUT_MS;
+    const { resolveProviderTimeoutMs, DEFAULT_AI_PROVIDER_TIMEOUT_MS } = await import("@/domain/ai/gemini-extractor");
+    expect(resolveProviderTimeoutMs()).toBe(DEFAULT_AI_PROVIDER_TIMEOUT_MS);
+    expect(DEFAULT_AI_PROVIDER_TIMEOUT_MS).toBe(60_000);
+  });
+
+  it("explicit timeoutMs option wins over env var", async () => {
+    process.env.AI_PROVIDER_TIMEOUT_MS = "5000";
+    const { resolveProviderTimeoutMs } = await import("@/domain/ai/gemini-extractor");
+    expect(resolveProviderTimeoutMs(42_000)).toBe(42_000);
+  });
+});
+
+describe("Smart Schedule Import - Route classification of repeated 503 vs real timeout", () => {
+  const originalEnv = process.env.AI_PROVIDER_TIMEOUT_MS;
+
+  beforeEach(() => {
+    delete process.env.GEMINI_API_KEY;
+    setTestScheduleExtractor(null);
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.AI_PROVIDER_TIMEOUT_MS;
+    } else {
+      process.env.AI_PROVIDER_TIMEOUT_MS = originalEnv;
+    }
+    setTestScheduleExtractor(null);
+  });
+
+  it("repeated 503 from extractor surfaces as HTTP 503 (GEMINI_SERVICE_UNAVAILABLE), not 504", async () => {
+    const mockExtractor: ScheduleExtractor = {
+      extract: async () => {
+        throw new Error("GEMINI_SERVICE_UNAVAILABLE");
+      }
+    };
+    setTestScheduleExtractor(mockExtractor);
+
+    const formData = new FormData();
+    formData.append("consent", "true");
+    formData.append("file", new Blob(["x"], { type: "image/png" }), "s.png");
+
+    const request = new Request("http://localhost:3002/api/schedule/extract", {
+      method: "POST",
+      body: formData
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(503);
+
+    const body = await response.json();
+    expect(body.success).toBe(false);
+    expect(body.error).toContain("مشغولة");
+  });
+
+  it("a true extractor timeout surfaces as HTTP 504 (AI_PROVIDER_TIMEOUT)", async () => {
+    const mockExtractor: ScheduleExtractor = {
+      extract: async () => {
+        throw new Error("AI_PROVIDER_TIMEOUT");
+      }
+    };
+    setTestScheduleExtractor(mockExtractor);
+
+    const formData = new FormData();
+    formData.append("consent", "true");
+    formData.append("file", new Blob(["x"], { type: "image/png" }), "s.png");
+
+    const request = new Request("http://localhost:3002/api/schedule/extract", {
+      method: "POST",
+      body: formData
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(504);
+
+    const body = await response.json();
+    expect(body.success).toBe(false);
+    expect(body.error).toContain("وقتاً طويلاً");
   });
 });
 

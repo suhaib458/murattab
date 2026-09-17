@@ -20,6 +20,12 @@ test.describe("Smart Schedule Import - استيراد الجدول بالذكا�
     const hasOnboarding = await nameInput.waitFor({ state: "visible", timeout: 6000 }).then(() => true).catch(() => false);
     if (hasOnboarding) {
       await nameInput.fill("أحمد");
+      // Phase 3C: pick a faculty + major before submitting.
+      // Use exact combobox locators to avoid the substring ambiguity between
+      // the faculty <label> ("الكلية") and the major <select>'s placeholder
+      // option text ("اختر الكلية أولًا").
+      await page.getByRole("combobox", { name: "الكلية", exact: true }).selectOption({ label: "كلية تكنولوجيا المعلومات والاتصالات" });
+      await page.getByRole("combobox", { name: "التخصص", exact: true }).selectOption({ label: "علم الحاسوب /الذكاء الاصطناعي وعلم البيانات" });
       await page.getByRole("button", { name: "ابدأ مع مرتب" }).click();
     }
 

@@ -5,9 +5,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { ttuConfig } from "@/config/ttu";
+import { ttuConfig, isLegacyAcademicSelection, isResolvableAcademicId } from "@/config/ttu";
 import { makeBackup, readBackup } from "@/domain/backup";
-import { type AppSettings, type ClassSession, type Course, type DayCode, type StudentProfile } from "@/domain/models";
+import { type AcademicCalendarEvent, type AppSettings, type ClassSession, type Course, type DayCode, type StudentProfile } from "@/domain/models";
 import {
   calculateFreeTimeSlots,
   dayNames,
@@ -19,7 +19,7 @@ import {
   orderedDays,
   sortSessions
 } from "@/domain/schedule";
-import { generateCourseIcs, generateIcs } from "@/domain/calendar";
+import { generateCourseIcs, generateIcs, getEventsOnDate, ttuAcademicCalendar } from "@/domain/calendar";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { LocalScheduleRepository } from "@/storage/local-repository";
 import { ImportDialog } from "./import-dialog";
@@ -65,6 +65,27 @@ function getDayCodeFromJsDay(jsDay: number): DayCode | null {
   const map: Record<number, DayCode> = { 6: "س", 0: "ح", 1: "ن", 2: "ث", 3: "ر", 4: "خ" };
   return map[jsDay] ?? null;
 }
+
+function toIsoDateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const academicEventKindLabel: Record<AcademicCalendarEvent["kind"], string> = {
+  registration: "تسجيل",
+  exam: "امتحان",
+  holiday: "عطلة",
+  other: "حدث أكاديمي"
+};
+
+const academicEventKindToken: Record<AcademicCalendarEvent["kind"], string> = {
+  registration: "var(--accent)",
+  exam: "var(--warning)",
+  holiday: "var(--success)",
+  other: "var(--foreground-muted)"
+};
 
 export function MurattabApp() {
   const pathname = usePathname();
@@ -165,6 +186,22 @@ export function MurattabApp() {
     <Onboarding
       onComplete={async (profile, settings, term) => {
         await repo.bootstrap(profile, term, settings);
+        await refresh();
+      }}
+    />
+  ) : isLegacyAcademicSelection(data.profile.facultyId, data.profile.majorId) ? (
+    <LegacyAcademicRefresh
+      currentName={data.profile.name}
+      onSave={async (facultyId, majorId) => {
+        if (!data.profile) return;
+        await repo.saveProfile({ ...data.profile, facultyId, majorId });
+        await refresh();
+        setNotice("تم تحديث بياناتك الجامعية بنجاح.");
+      }}
+      onSkip={async () => {
+        setNotice("حتى الآن ستظهر بياناتك كغير محدد في الواجهة. يمكنك التحديث من الإعدادات لاحقًا.");
+        // Forcing a refresh will let the dashboard render; the lookup fallbacks
+        // in SettingsView will show "كلية عامة"/"تخصص عام" until the user updates.
         await refresh();
       }}
     />
@@ -467,10 +504,16 @@ function Onboarding({
     watch,
     formState: { errors, isSubmitting }
   } = useForm<{ name: string; facultyId: string; majorId: string }>({
-    defaultValues: { facultyId: ttuConfig.faculties[0].id, majorId: ttuConfig.majors[0].id }
+    defaultValues: { facultyId: "", majorId: "" }
   });
   const facultyId = watch("facultyId");
+  const majorId = watch("majorId");
   const majors = ttuConfig.majors.filter((major) => major.facultyId === facultyId);
+
+  // If the chosen faculty does not contain the currently selected major, reset major.
+  const majorIsValidForFaculty = facultyId
+    ? ttuConfig.majors.some((m) => m.id === majorId && m.facultyId === facultyId)
+    : false;
 
   return (
     <section className="onboarding card">
@@ -487,11 +530,18 @@ function Onboarding({
       <p className="eyebrow">مرحبًا بك في مرتب</p>
       <h1>لنرتّب فصلك الدراسي</h1>
       <p className="muted">
-        هذه البيانات تبقى على جهازك محليًا بالكامل. قوائم الكليات والتخصصات الحالية مخصّصة للتطوير حتى اعتماد بيانات الجامعة الرسمية.
+        هذه البيانات تبقى على جهازك محليًا بالكامل. تعتمد القوائم أدناه على بيانات جامعة الطفيلة التقنية الرسمية الحالية.
       </p>
       <form
         className="form"
         onSubmit={handleSubmit(async (values) => {
+          if (!values.facultyId) {
+            return;
+          }
+          const allowedMajors = ttuConfig.majors.filter((m) => m.facultyId === values.facultyId);
+          if (!allowedMajors.some((m) => m.id === values.majorId)) {
+            return;
+          }
           const profile: StudentProfile = {
             id: crypto.randomUUID(),
             name: values.name.trim(),
@@ -500,11 +550,13 @@ function Onboarding({
             majorId: values.majorId,
             createdAt: new Date().toISOString()
           };
+          // Production AcademicTerm: first semester 2026/2027.
+          // teaching start = 2026-10-04, last teaching day = 2027-01-07 (verified)
           const term = {
             id: crypto.randomUUID(),
-            name: "الفصل الحالي",
-            startsOn: "2026-09-01",
-            endsOn: "2026-12-31",
+            name: "الفصل الدراسي الأول 2026/2027",
+            startsOn: "2026-10-04",
+            endsOn: "2027-01-07",
             isCurrent: true
           };
           await onComplete(
@@ -535,27 +587,149 @@ function Onboarding({
         </label>
         <label className="field">
           الكلية
-          <select {...register("facultyId")}>
+          <select
+            {...register("facultyId", {
+              required: "اختر الكلية أولًا"
+            })}
+          >
+            <option value="">اختر الكلية</option>
             {ttuConfig.faculties.map((faculty) => (
               <option value={faculty.id} key={faculty.id}>
                 {faculty.name}
               </option>
             ))}
           </select>
+          {errors.facultyId && <span role="alert">{errors.facultyId.message}</span>}
         </label>
         <label className="field">
           التخصص
-          <select {...register("majorId")}>
+          <select
+            {...register("majorId", {
+              validate: (value) => {
+                if (!facultyId) return "اختر الكلية أولًا";
+                if (!value) return "اختر التخصص";
+                return ttuConfig.majors.some((m) => m.id === value && m.facultyId === facultyId) ||
+                  "التخصص لا يتبع الكلية المختارة";
+              }
+            })}
+            disabled={!facultyId}
+          >
+            <option value="">{facultyId ? "اختر التخصص" : "اختر الكلية أولًا"}</option>
             {majors.map((major) => (
               <option value={major.id} key={major.id}>
                 {major.name}
               </option>
             ))}
           </select>
+          {errors.majorId && <span role="alert">{errors.majorId.message}</span>}
         </label>
-        <button className="button" disabled={isSubmitting}>
+        <button
+          className="button"
+          disabled={isSubmitting || !facultyId || !majorIsValidForFaculty}
+        >
           {isSubmitting ? "جارٍ الحفظ…" : "ابدأ مع مرتب"}
         </button>
+      </form>
+    </section>
+  );
+}
+
+/**
+ * Non-destructive "Refresh faculty/major" flow.
+ *
+ * Shown when an existing profile's facultyId/majorId is either a V0
+ * legacy placeholder UUID or simply no longer resolvable in the
+ * current canonical TTU dataset. The profile, name, courses, sessions,
+ * and settings are kept untouched. Only facultyId and majorId are updated.
+ */
+function LegacyAcademicRefresh({
+  currentName,
+  onSave,
+  onSkip
+}: {
+  currentName: string;
+  onSave: (facultyId: string, majorId: string) => Promise<void>;
+  onSkip: () => Promise<void>;
+}) {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting }
+  } = useForm<{ facultyId: string; majorId: string }>({
+    defaultValues: { facultyId: "", majorId: "" }
+  });
+  const facultyId = watch("facultyId");
+  const majorId = watch("majorId");
+  const majors = ttuConfig.majors.filter((m) => m.facultyId === facultyId);
+  const majorIsValidForFaculty = facultyId
+    ? ttuConfig.majors.some((m) => m.id === majorId && m.facultyId === facultyId)
+    : false;
+
+  return (
+    <section className="onboarding card">
+      <p className="eyebrow">تحديث بياناتك الجامعية</p>
+      <h1>حدّث بياناتك الجامعية</h1>
+      <p className="muted">
+        أهلًا {currentName}. اعتمدنا قوائم جامعة الطفيلة التقنية الرسمية في «مرتب»، لذلك نحتاج منك اختيار كليتك وتخصصك الحاليين فقط. جدولك وإعداداتك ستبقى كما هي.
+      </p>
+      <form
+        className="form"
+        onSubmit={handleSubmit(async (values) => {
+          if (!values.facultyId) return;
+          if (!ttuConfig.majors.some((m) => m.id === values.majorId && m.facultyId === values.facultyId)) {
+            return;
+          }
+          await onSave(values.facultyId, values.majorId);
+        })}
+      >
+        <label className="field">
+          الكلية
+          <select {...register("facultyId", { required: "اختر الكلية" })}>
+            <option value="">اختر الكلية</option>
+            {ttuConfig.faculties.map((f) => (
+              <option value={f.id} key={f.id}>{f.name}</option>
+            ))}
+          </select>
+          {errors.facultyId && <span role="alert">{errors.facultyId.message}</span>}
+        </label>
+        <label className="field">
+          التخصص
+          <select
+            {...register("majorId", {
+              validate: (value) => {
+                if (!facultyId) return "اختر الكلية أولًا";
+                if (!value) return "اختر التخصص";
+                return ttuConfig.majors.some((m) => m.id === value && m.facultyId === facultyId) ||
+                  "التخصص لا يتبع الكلية المختارة";
+              }
+            })}
+            disabled={!facultyId}
+          >
+            <option value="">{facultyId ? "اختر التخصص" : "اختر الكلية أولًا"}</option>
+            {majors.map((m) => (
+              <option value={m.id} key={m.id}>{m.name}</option>
+            ))}
+          </select>
+          {errors.majorId && <span role="alert">{errors.majorId.message}</span>}
+        </label>
+        <div className="actions" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="submit"
+            className="button"
+            disabled={isSubmitting || !facultyId || !majorIsValidForFaculty}
+          >
+            {isSubmitting ? "جارٍ الحفظ…" : "حفظ"}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => void onSkip()}
+            disabled={isSubmitting}
+          >
+            تخطي الآن
+          </button>
+        </div>
       </form>
     </section>
   );
@@ -956,6 +1130,9 @@ function CalendarView({ data }: { data: AppSnapshot }) {
     ? sortSessions(data.sessions.filter((session) => session.day === selectedDayCode))
     : [];
 
+  const selectedIsoDate = toIsoDateLocal(selectedDateObj);
+  const selectedEvents = getEventsOnDate(ttuAcademicCalendar.events, selectedIsoDate);
+
   const isToday = (dayNum: number) => {
     const today = new Date();
     return today.getFullYear() === year && today.getMonth() === month && today.getDate() === dayNum;
@@ -994,16 +1171,27 @@ function CalendarView({ data }: { data: AppSnapshot }) {
             const sessionCount = cellDayCode
               ? data.sessions.filter((session) => session.day === cellDayCode).length
               : 0;
+            const cellIsoDate = toIsoDateLocal(cellDateObj);
+            const cellEvents = getEventsOnDate(ttuAcademicCalendar.events, cellIsoDate);
             const isSelected = safeSelected === date;
 
             return (
               <button
-                className={`day-cell ${sessionCount ? "has-session" : ""} ${isSelected ? "selected" : ""} ${isToday(date) ? "today" : ""}`}
+                className={`day-cell ${sessionCount ? "has-session" : ""} ${isSelected ? "selected" : ""} ${isToday(date) ? "today" : ""} ${cellEvents.length ? "has-event" : ""}`}
                 key={date}
                 onClick={() => setSelectedDayNum(date)}
-                aria-label={`${date} ${arabicMonths[month]}، ${sessionCount} جلسات`}
+                aria-label={`${date} ${arabicMonths[month]}، ${sessionCount} جلسات${cellEvents.length ? `، ${cellEvents.length} أحداث` : ""}`}
               >
                 <span>{date}</span>
+                {cellEvents.length > 0 && (
+                  <span
+                    className="badge event-badge"
+                    title={cellEvents.map((e) => `${academicEventKindLabel[e.kind]}: ${e.title}`).join("\n")}
+                    style={{ backgroundColor: academicEventKindToken[cellEvents[0].kind] }}
+                  >
+                    {cellEvents.length === 1 ? academicEventKindLabel[cellEvents[0].kind] : cellEvents.length}
+                  </span>
+                )}
                 {sessionCount > 0 && (
                   <span className="badge" title={`${sessionCount} محاضرات`}>
                     {sessionCount}
@@ -1030,6 +1218,51 @@ function CalendarView({ data }: { data: AppSnapshot }) {
             : "يوم الجمعة عطلة أسبوعية؛ لا توجد محاضرات."
         }
       />
+
+      {selectedEvents.length > 0 && (
+        <section className="card" style={{ marginTop: 16 }} aria-label={`أحداث التقويم الأكاديمي ليوم ${safeSelected} ${arabicMonths[month]}`}>
+          <div className="section-head">
+            <h2>أحداث التقويم الأكاديمي</h2>
+          </div>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
+            {selectedEvents.map((event) => (
+              <li
+                key={event.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  background: "var(--surface-muted)",
+                  borderRadius: 12,
+                  border: "1px solid var(--border)"
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-block",
+                    minWidth: 8,
+                    height: 32,
+                    borderRadius: 4,
+                    backgroundColor: academicEventKindToken[event.kind]
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{event.title}</div>
+                  <div className="muted" style={{ fontSize: "0.85rem" }}>
+                    {event.endsOn && event.endsOn !== event.startsOn
+                      ? `${event.startsOn} → ${event.endsOn}`
+                      : event.startsOn}
+                    {" · "}
+                    {academicEventKindLabel[event.kind]}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </section>
   );
 }

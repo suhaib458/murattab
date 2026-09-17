@@ -1,1 +1,109 @@
-{ "schemaVersion": 1, "universityId": "ttu", "academicYear": "2026-2027", "term": "first", "events": [] }
+{
+  "schemaVersion": 1,
+  "universityId": "ttu",
+  "academicYear": "2026-2027",
+  "term": "first",
+  "events": [
+    {
+      "id": "ttu-2026-2027-first-001",
+      "title": "بداية العام الجامعي وبدء فترة السحب والإضافة",
+      "startsOn": "2026-09-27",
+      "kind": "registration"
+    },
+    {
+      "id": "ttu-2026-2027-first-002",
+      "title": "فترة الامتحانات التعويضية (غير المكتمل والتكميلي)",
+      "startsOn": "2026-09-27",
+      "endsOn": "2026-10-10",
+      "kind": "exam"
+    },
+    {
+      "id": "ttu-2026-2027-first-003",
+      "title": "بدء التدريس",
+      "startsOn": "2026-10-04",
+      "kind": "other"
+    },
+    {
+      "id": "ttu-2026-2027-first-004",
+      "title": "آخر موعد لمعادلة المواد",
+      "startsOn": "2026-10-29",
+      "kind": "registration"
+    },
+    {
+      "id": "ttu-2026-2027-first-005",
+      "title": "فترة إجراء امتحان منتصف الفصل",
+      "startsOn": "2026-11-22",
+      "endsOn": "2026-12-03",
+      "kind": "exam"
+    },
+    {
+      "id": "ttu-2026-2027-first-006",
+      "title": "عيد الميلاد المجيد",
+      "startsOn": "2026-12-25",
+      "kind": "holiday"
+    },
+    {
+      "id": "ttu-2026-2027-first-007",
+      "title": "رأس السنة الميلادية",
+      "startsOn": "2027-01-01",
+      "kind": "holiday"
+    },
+    {
+      "id": "ttu-2026-2027-first-008",
+      "title": "بدء فترة التسجيل للفصل الدراسي الثاني 2026/2027",
+      "startsOn": "2027-01-03",
+      "kind": "registration"
+    },
+    {
+      "id": "ttu-2026-2027-first-009",
+      "title": "آخر موعد للانسحاب (الإسقاط) من دراسة مادة أو أكثر أو من جميع المواد",
+      "startsOn": "2027-01-07",
+      "kind": "registration"
+    },
+    {
+      "id": "ttu-2026-2027-first-010",
+      "title": "آخر موعد للحرمان",
+      "startsOn": "2027-01-07",
+      "kind": "other"
+    },
+    {
+      "id": "ttu-2026-2027-first-011",
+      "title": "آخر موعد للتدريس",
+      "startsOn": "2027-01-07",
+      "kind": "other"
+    },
+    {
+      "id": "ttu-2026-2027-first-012",
+      "title": "الامتحانات النهائية العملية والمحوسبة",
+      "startsOn": "2027-01-10",
+      "endsOn": "2027-01-14",
+      "kind": "exam"
+    },
+    {
+      "id": "ttu-2026-2027-first-013",
+      "title": "الامتحانات النهائية النظرية",
+      "startsOn": "2027-01-17",
+      "endsOn": "2027-01-26",
+      "kind": "exam"
+    },
+    {
+      "id": "ttu-2026-2027-first-014",
+      "title": "عيد ميلاد جلالة الملك عبدالله الثاني ابن الحسين المعظم",
+      "startsOn": "2027-01-30",
+      "kind": "holiday"
+    },
+    {
+      "id": "ttu-2026-2027-first-015",
+      "title": "آخر موعد لتقديم طلب لمن يرغب برفع المعدل التراكمي",
+      "startsOn": "2027-02-04",
+      "kind": "registration"
+    },
+    {
+      "id": "ttu-2026-2027-first-016",
+      "title": "فترة تقديم طلبات الانتقال من تخصص إلى آخر داخل الجامعة",
+      "startsOn": "2027-02-07",
+      "endsOn": "2027-02-11",
+      "kind": "registration"
+    }
+  ]
+}

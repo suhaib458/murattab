@@ -1,1 +1,20 @@
-{ "note": "هذه بيانات تطوير فقط؛ استبدل القوائم ببيانات الجامعة الرسمية المؤكدة قبل الإطلاق.", "university": "جامعة الطفيلة التقنية" }
+{
+  "_comment": "DOCUMENTATION MIRROR ONLY. The runtime canonical TTU faculties/majors live in src/config/ttu.ts (TypeScript module bundled with the app). This file is a human-readable snapshot for reference and is NOT loaded by the application. If the two ever drift, the TS module wins at runtime. To re-validate this file against the TS module, run `pnpm data:validate` (see scripts/validate-ttu-data.ts).",
+  "universityId": "ttu",
+  "name": "جامعة الطفيلة التقنية",
+  "englishName": "Tafila Technical University",
+  "internalAppIdNote": "\"ttu\" is the internal app ID; not a claim of an official university ID.",
+  "timezone": "Asia/Amman",
+  "verificationDate": "2026-09-17",
+  "sources": {
+    "faculties": "https://www.ttu.edu.jo/academics/",
+    "programs": "https://www.ttu.edu.jo/ttu_overview/departments/financial-directorate/",
+    "itCollege": "https://www.ttu.edu.jo/academics/college-of-information-technology-and-communication/",
+    "ictLabs": "https://www.ttu.edu.jo/13731/",
+    "calendar": "https://www.ttu.edu.jo/e-calendar/"
+  },
+  "outOfScopeV1": {
+    "name": "الكلية التقنية المتوسطة",
+    "reason": "Programs in the official table are classified as 'دبلوم متوسط' (intermediate diploma). Not part of bachelor onboarding in V1."
+  }
+}

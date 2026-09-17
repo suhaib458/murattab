@@ -1,4 +1,5 @@
-import type { AcademicTerm, ClassSession, Course, DayCode } from "./models";
+import type { AcademicTerm, ClassSession, Course, DayCode, AcademicCalendar, AcademicCalendarEvent } from "./models";
+import { AcademicCalendarSchema } from "./models";
 import { dayNames } from "./schedule";
 
 const dayToJsWeekday: Record<DayCode, number> = {
@@ -81,4 +82,31 @@ export function generateCourseIcs(course: Course, sessions: ClassSession[], term
 }
 
 export { icsDate };
+
+/**
+ * Academic calendar helpers — used to render the official TTU calendar
+ * in the Calendar UI alongside the student's recurring class sessions.
+ *
+ * The official calendar is loaded synchronously from a typed module that
+ * re-exports `data/academic-calendars/ttu/2026-2027/first/calendar.json`.
+ * No network call. Works fully offline.
+ */
+export { ttuAcademicCalendar } from "./ttu-academic-calendar";
+
+/** Returns all events that intersect the given date (YYYY-MM-DD). */
+export function getEventsOnDate(
+  events: ReadonlyArray<AcademicCalendarEvent>,
+  isoDate: string
+): AcademicCalendarEvent[] {
+  return events.filter((e) => {
+    const end = e.endsOn ?? e.startsOn;
+    return isoDate >= e.startsOn && isoDate <= end;
+  });
+}
+
+/** Returns the first event (by start date) at or after the given date, if any. */
+export function getNextEvent(events: ReadonlyArray<AcademicCalendarEvent>, isoDate: string): AcademicCalendarEvent | undefined {
+  return [...events].sort((a, b) => a.startsOn.localeCompare(b.startsOn)).find((e) => e.startsOn >= isoDate);
+}
+
 

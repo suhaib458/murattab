@@ -1,8 +1,62 @@
-import { AppSettingsSchema, type AppSettings, type StudentProfile, type Course, type ClassSession } from "@/domain/models";
+import { AppSettingsSchema, AcademicTermSchema, type AcademicTerm, type AppSettings, type StudentProfile, type Course, type ClassSession } from "@/domain/models";
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { db } from "./db";
 
 export const initialSettings: AppSettings = { id: "settings", theme: "system", onboardingComplete: false, splashShown: false, activeTermId: null, guideSeen: false, schemaVersion: 1 };
+
+/**
+ * Production AcademicTerm for the verified TTU 2026/2027 first semester.
+ * Used as the migration target for legacy placeholder terms.
+ *
+ * ID is a fixed UUID literal so the same production term is referenced
+ * consistently across reload / build / backup / restore.
+ */
+export const PRODUCTION_TERM_ID = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+
+export const PRODUCTION_TERM: AcademicTerm = AcademicTermSchema.parse({
+  id: PRODUCTION_TERM_ID,
+  name: "الفصل الدراسي الأول 2026/2027",
+  startsOn: "2026-10-04",
+  endsOn: "2027-01-07",
+  isCurrent: true
+});
+
+/**
+ * Detect and rewrite a legacy V0 placeholder term created during Foundation.
+ * Returns the migrated term list (and a possibly-updated activeTermId) and a
+ * `migrated` flag indicating whether any rewrite occurred.
+ *
+ * Conditions for migration (ALL must hold for a term to be rewritten):
+ *   1. name == "الفصل الحالي"
+ *   2. startsOn == "2026-09-01"
+ *   3. endsOn   == "2026-12-31"
+ *   4. isCurrent == true
+ *
+ * We do NOT modify any other term the user may have created manually.
+ */
+export function migrateLegacyTerms(
+  terms: AcademicTerm[],
+  activeTermId: string | null
+): { terms: AcademicTerm[]; activeTermId: string | null; migrated: boolean } {
+  let migrated = false;
+  const next = terms.map((t) => {
+    if (
+      t.name === "الفصل الحالي" &&
+      t.startsOn === "2026-09-01" &&
+      t.endsOn === "2026-12-31" &&
+      t.isCurrent
+    ) {
+      migrated = true;
+      return PRODUCTION_TERM;
+    }
+    return t;
+  });
+  // If the active term was the legacy one and we replaced it, point active at the production term.
+  if (migrated && activeTermId && next.some((t) => t.id === activeTermId) === false) {
+    return { terms: next, activeTermId: PRODUCTION_TERM.id, migrated };
+  }
+  return { terms: next, activeTermId, migrated };
+}
 
 export class LocalScheduleRepository implements ScheduleRepository {
   private profiles = db.table<StudentProfile, string>("profiles");
@@ -20,7 +74,21 @@ export class LocalScheduleRepository implements ScheduleRepository {
     try {
       const raw = localStorage.getItem(this.key);
       if (!raw) return this.memoryFallback;
-      return JSON.parse(raw) as AppSnapshot;
+      const snapshot = JSON.parse(raw) as AppSnapshot;
+      // Apply legacy term migration to the fallback snapshot too.
+      const migration = migrateLegacyTerms(snapshot.terms ?? [], snapshot.settings?.activeTermId ?? null);
+      if (migration.migrated) {
+        const next: AppSnapshot = {
+          ...snapshot,
+          terms: migration.terms,
+          settings: migration.activeTermId !== snapshot.settings.activeTermId
+            ? { ...snapshot.settings, activeTermId: migration.activeTermId }
+            : snapshot.settings
+        };
+        this.saveFallback(next);
+        return next;
+      }
+      return snapshot;
     } catch {
       return this.memoryFallback;
     }
@@ -40,14 +108,33 @@ export class LocalScheduleRepository implements ScheduleRepository {
     const rawSettings = await this.settings.get("settings");
     const parsedSettings = rawSettings ? (AppSettingsSchema.safeParse(rawSettings).data ?? initialSettings) : initialSettings;
     const profiles = await this.profiles.toArray();
-    const terms = await this.terms.toArray();
+    const rawTerms = await this.terms.toArray();
     const courses = await this.courses.toArray();
     const sessions = await this.sessions.toArray();
 
+    // Phase 3C: rewrite legacy V0 placeholder term to the verified production term.
+    const migration = migrateLegacyTerms(rawTerms, parsedSettings.activeTermId);
+    if (migration.migrated) {
+      try {
+        await db.transaction("rw", this.terms, this.settings, async () => {
+          // Replace legacy term with the production one (keep the production id stable).
+          await this.terms.clear();
+          if (migration.terms.length) await this.terms.bulkPut(migration.terms);
+          if (migration.activeTermId !== parsedSettings.activeTermId) {
+            await this.settings.put({ ...parsedSettings, activeTermId: migration.activeTermId });
+          }
+        });
+      } catch (err) {
+        console.warn("Legacy term migration failed:", err);
+      }
+    }
+
     return {
       profile: profiles[0] ?? null,
-      settings: parsedSettings,
-      terms,
+      settings: migration.migrated && migration.activeTermId !== parsedSettings.activeTermId
+        ? { ...parsedSettings, activeTermId: migration.activeTermId }
+        : parsedSettings,
+      terms: migration.terms,
       courses,
       sessions
     };
@@ -175,8 +262,19 @@ export class LocalScheduleRepository implements ScheduleRepository {
   }
 
   async replace(snapshot: AppSnapshot): Promise<void> {
-    this.saveFallback(snapshot);
-    await this.syncToDexie(snapshot);
+    // Apply legacy term migration to the incoming snapshot (e.g. backup restore).
+    const migration = migrateLegacyTerms(snapshot.terms ?? [], snapshot.settings?.activeTermId ?? null);
+    const next: AppSnapshot = migration.migrated
+      ? {
+          ...snapshot,
+          terms: migration.terms,
+          settings: migration.activeTermId !== snapshot.settings.activeTermId
+            ? { ...snapshot.settings, activeTermId: migration.activeTermId }
+            : snapshot.settings
+        }
+      : snapshot;
+    this.saveFallback(next);
+    await this.syncToDexie(next);
   }
 
   async clear(): Promise<void> {

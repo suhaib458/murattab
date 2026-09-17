@@ -33,6 +33,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "scripts/**/*.ts",
+    "data/**/*.json",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

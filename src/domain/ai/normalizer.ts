@@ -6,7 +6,7 @@ import {
   type ScheduleExtractionResult,
   dayCodes
 } from "../models";
-import { expandRoom, orderedDays } from "../schedule";
+import { expandRoom, getIctLabLabel, orderedDays } from "../schedule";
 import type { RawCourseExtraction, RawExtractionResponse, RawSessionExtraction } from "./extraction-schema";
 
 /**
@@ -235,8 +235,9 @@ export function normalizeExtractionResult(raw: RawExtractionResponse): ScheduleE
       let roomExpanded: string | undefined = expanded.label !== rawRoomText ? expanded.label : undefined;
 
       // In the context of a lab session, if room is an ICT lab code, format label as مختبر الحاسوب ICT - 4
-      if (!roomExpanded && sessRaw.kind === "lab" && /(?:^|\s)ICT(?:\s*-\s*\d+|\s+\d+|$)/i.test(rawRoomText)) {
-        roomExpanded = `مختبر الحاسوب ${rawRoomText}`;
+      if (!roomExpanded) {
+        const ictLabel = getIctLabLabel(rawRoomText, sessRaw.kind);
+        if (ictLabel) roomExpanded = ictLabel;
       }
 
       if (!rawRoomText) {

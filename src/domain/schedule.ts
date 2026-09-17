@@ -14,6 +14,13 @@ export function parseDayCodes(raw: string): DayCode[] {
   return [...new Set([...raw].filter((code): code is DayCode => orderedDays.includes(code as DayCode)))];
 }
 
+/**
+ * @deprecated Heuristic only. The 100/200/300 floor convention is NOT
+ * officially documented by TTU (Phase 3B / docs/ttu-data-sources.md:
+ * `UNVERIFIED_HEURISTIC`). The function is retained for backward
+ * compatibility with V0 callers and tests but MUST NOT be used in
+ * production UI flows. Do not surface floor labels to end users.
+ */
 export function getFloorLabel(roomDigits: string): string | null {
   const num = parseInt(roomDigits, 10);
   if (isNaN(num)) return null;
@@ -55,6 +62,30 @@ export function expandRoom(raw: string, columnContext = true): RoomLocation {
   }
 
   return { raw: clean, label: clean, isOnline: false };
+}
+
+/**
+ * Single source of truth for ICT computer-lab display labels.
+ *
+ * Official TTU lab names take the form "مختبر الحاسوب ICT 1" … "ICT 7"
+ * (https://www.ttu.edu.jo/13731/). The schedule raw form is usually
+ * "ICT - 4" or "ICT 4"; we preserve the raw token and prefix it with
+ * "مختبر الحاسوب " so the UI shows the official lab label.
+ *
+ * This helper is the ONLY place in the codebase that knows the ICT
+ * formatting rule. `normalizer`, the review UI, and the schedule view
+ * all delegate here.
+ *
+ * Returns the labelled string if the room is an ICT lab, otherwise null.
+ */
+export function getIctLabLabel(roomRaw: string, kind: ClassSession["kind"] | "unspecified" | undefined): string | null {
+  if (kind !== "lab") return null;
+  const clean = roomRaw.trim();
+  if (!clean) return null;
+  if (/(?:^|\s)ICT(?:\s*-\s*\d+|\s+\d+|$)/i.test(clean)) {
+    return `مختبر الحاسوب ${clean}`;
+  }
+  return null;
 }
 
 export function sortSessions(sessions: ClassSession[]): ClassSession[] {

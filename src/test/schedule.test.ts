@@ -213,24 +213,25 @@ describe("الجدول ومنطق المجال في مرتب", () => {
   });
 
   describe("توليد ملفات التقويم (ICS) وفق RFC 5545", () => {
-    const term = { id: termId, name: "الأول", startsOn: "2026-09-01", endsOn: "2026-12-31", isCurrent: true };
+    // Phase 3C: production first-semester 2026/2027 dates (teaching start).
+    const term = { id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true };
     const course = {
       id: courseId,
       termId,
       name: "برمجة الويب",
       reminder: { enabled: true, minutesBefore: 15 },
-      createdAt: "2026-09-01T00:00:00.000Z"
+      createdAt: "2026-10-04T00:00:00.000Z"
     };
 
     it("يحسب تاريخ أول تكرار (DTSTART) يطابق يوم المحاضرة الفعلي", () => {
-      // 2026-09-01 هو يوم ثلاثاء (ث)
-      // لجلسة الأحد (ح)، يجب أن يكون أول تاريخ 2026-09-06
+      // 2026-10-04 هو يوم أحد (ح)
+      // لجلسة الأحد (ح) عند term.startsOn = 2026-10-04، يجب أن يكون أول تاريخ 2026-10-04
       const sundayFirstDate = getFirstOccurrenceDate(term.startsOn, "ح");
-      expect(sundayFirstDate).toBe("20260906");
+      expect(sundayFirstDate).toBe("20261004");
 
-      // لجلسة الثلاثاء (ث)، يجب أن يكون نفس يوم البدء 2026-09-01
+      // لجلسة الثلاثاء (ث)، أول تاريخ بعد 2026-10-04 هو 2026-10-06
       const tuesdayFirstDate = getFirstOccurrenceDate(term.startsOn, "ث");
-      expect(tuesdayFirstDate).toBe("20260901");
+      expect(tuesdayFirstDate).toBe("20261006");
     });
 
     it("يولد ملف ICS متكامل مع UNTIL و RRULE و VALARM للمنبهات", () => {
@@ -238,8 +239,9 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       expect(ics).toContain("BEGIN:VCALENDAR");
       expect(ics).toContain("VERSION:2.0");
       expect(ics).toContain("SUMMARY:برمجة الويب");
-      expect(ics).toContain("DTSTART;TZID=Asia/Amman:20260906T090000");
-      expect(ics).toContain("RRULE:FREQ=WEEKLY;UNTIL=20261231T235959Z");
+      // baseSession.day = ح (Sunday); first occurrence = 2026-10-04
+      expect(ics).toContain("DTSTART;TZID=Asia/Amman:20261004T090000");
+      expect(ics).toContain("RRULE:FREQ=WEEKLY;UNTIL=20270107T235959Z");
       expect(ics).toContain("BEGIN:VALARM");
       expect(ics).toContain("TRIGGER:-PT15M");
       expect(ics).toContain("END:VCALENDAR");
@@ -248,7 +250,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
     it("يولد ICS لمادة واحدة مفردة عبر generateCourseIcs", () => {
       const singleIcs = generateCourseIcs(course, [baseSession], term);
       expect(singleIcs).toContain("SUMMARY:برمجة الويب");
-      expect(singleIcs).toContain("DTSTART;TZID=Asia/Amman:20260906T090000");
+      expect(singleIcs).toContain("DTSTART;TZID=Asia/Amman:20261004T090000");
     });
   });
 });

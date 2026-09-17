@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "calendar:validate": "tsx scripts/validate-calendar.ts"
+    "calendar:validate": "tsx scripts/validate-calendar.ts",
+    "data:validate": "tsx scripts/validate-ttu-data.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

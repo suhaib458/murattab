@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClassSession, Course, DayCode, ExtractionIssue, RoomLocation, ScheduleExtractionResult } from "@/domain/models";
-import { dayNames, expandRoom, findConflicts, formatArabicTime, orderedDays } from "@/domain/schedule";
+import { dayNames, expandRoom, findConflicts, formatArabicTime, getIctLabLabel, orderedDays } from "@/domain/schedule";
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 
@@ -46,10 +46,7 @@ function getSessionExpandedRoomLabel(roomRaw: string, kind?: string, precomputed
   if (exp.label && exp.label !== clean) {
     return exp.label;
   }
-  if (kind === "lab" && /(?:^|\s)ICT(?:\s*-\s*\d+|\s+\d+|$)/i.test(clean)) {
-    return `مختبر الحاسوب ${clean}`;
-  }
-  return null;
+  return getIctLabLabel(clean, kind as "lecture" | "lab" | "unspecified" | undefined);
 }
 
 function formatSessionRoom(roomRaw: string, kind?: string, roomExpanded?: string): RoomLocation {
@@ -64,8 +61,9 @@ function formatSessionRoom(roomRaw: string, kind?: string, roomExpanded?: string
   if (roomExpanded && roomExpanded !== clean) {
     return { raw: clean, label: roomExpanded, isOnline: false };
   }
-  if (kind === "lab" && /(?:^|\s)ICT(?:\s*-\s*\d+|\s+\d+|$)/i.test(clean)) {
-    return { raw: clean, label: `مختبر الحاسوب ${clean}`, isOnline: false };
+  const ict = getIctLabLabel(clean, kind as "lecture" | "lab" | "unspecified" | undefined);
+  if (ict) {
+    return { raw: clean, label: ict, isOnline: false };
   }
   return expandRoom(clean);
 }
