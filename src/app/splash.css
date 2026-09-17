@@ -1,0 +1,1 @@
+.splash{padding:24px}.splash video,.splash-poster{width:min(300px,70vw);aspect-ratio:9/16;object-fit:cover;border-radius:22px}.splash-poster{display:grid;place-items:center;background:color-mix(in srgb,var(--primary-foreground),transparent 88%)}.splash .brand-mark{display:block}.splash-skip{margin-top:14px}

@@ -1,0 +1,15 @@
+{
+  "name": "مرتب",
+  "short_name": "مرتب",
+  "description": "جدولك الجامعي، أوضح وأقرب إليك.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F4EA",
+  "theme_color": "#103B32",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
