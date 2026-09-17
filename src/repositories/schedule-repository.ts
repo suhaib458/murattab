@@ -6,6 +6,7 @@ export interface ScheduleRepository {
   bootstrap(profile: StudentProfile, term: AcademicTerm, settings: AppSettings): Promise<void>;
   saveProfile(profile: StudentProfile): Promise<void>;
   saveCourse(course: Course, sessions: ClassSession[]): Promise<void>;
+  saveCourses(batch: Array<{ course: Course; sessions: ClassSession[] }>): Promise<void>;
   deleteCourse(courseId: string): Promise<void>;
   saveSettings(settings: AppSettings): Promise<void>;
   replace(snapshot: AppSnapshot): Promise<void>;

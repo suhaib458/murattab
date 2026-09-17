@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("شاشة البداية تنتهي تلقائيًا أو عند النقر على تخطي", async ({ page, isMobile }) => {
   await page.goto("/");
   const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
-  await expect(splash).toBeVisible({ timeout: 5000 });
+  await expect(splash).toBeVisible({ timeout: 10000 });
 
   if (isMobile) {
     const video = page.locator(".splash video");

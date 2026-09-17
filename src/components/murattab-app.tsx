@@ -22,6 +22,7 @@ import {
 import { generateCourseIcs, generateIcs } from "@/domain/calendar";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { LocalScheduleRepository } from "@/storage/local-repository";
+import { ImportDialog } from "./import-dialog";
 
 const repo = new LocalScheduleRepository();
 
@@ -71,7 +72,7 @@ export function MurattabApp() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showSplash, setShowSplash] = useState(false);
   const [online, setOnline] = useState(true);
-  const [modal, setModal] = useState<"course" | "restore" | "guide" | null>(null);
+  const [modal, setModal] = useState<"course" | "restore" | "guide" | "import" | null>(null);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -181,6 +182,7 @@ export function MurattabApp() {
       }}
       openRestore={() => setModal("restore")}
       openGuide={() => setModal("guide")}
+      openImport={() => setModal("import")}
       refresh={refresh}
       notify={setNotice}
     />
@@ -245,6 +247,19 @@ export function MurattabApp() {
 
       {modal === "guide" && (
         <GuideModal close={() => setModal(null)} />
+      )}
+
+      {modal === "import" && data && (
+        <ImportDialog
+          data={data}
+          repo={repo}
+          close={() => setModal(null)}
+          saved={async () => {
+            await refresh();
+            setModal(null);
+          }}
+          notify={setNotice}
+        />
       )}
 
       {notice && (
@@ -553,6 +568,7 @@ function Dashboard({
   editCourse,
   openRestore,
   openGuide,
+  openImport,
   refresh,
   notify
 }: {
@@ -562,11 +578,21 @@ function Dashboard({
   editCourse: (course: Course) => void;
   openRestore: () => void;
   openGuide: () => void;
+  openImport: () => void;
   refresh: () => Promise<void>;
   notify: (value: string) => void;
 }) {
   if (pathname === "/schedule") {
-    return <ScheduleView data={data} openCourse={openCourse} editCourse={editCourse} refresh={refresh} notify={notify} />;
+    return (
+      <ScheduleView
+        data={data}
+        openCourse={openCourse}
+        openImport={openImport}
+        editCourse={editCourse}
+        refresh={refresh}
+        notify={notify}
+      />
+    );
   }
   if (pathname === "/calendar") {
     return <CalendarView data={data} />;
@@ -612,6 +638,9 @@ function Dashboard({
           <div className="actions">
             <button className="button" onClick={openCourse}>
               إضافة مادة يدويًا
+            </button>
+            <button className="button secondary" onClick={openImport}>
+              استيراد الجدول
             </button>
             {data.courses.length > 0 && (
               <button className="button secondary" onClick={exportIcs}>
@@ -731,12 +760,14 @@ function SessionList({
 function ScheduleView({
   data,
   openCourse,
+  openImport,
   editCourse,
   refresh,
   notify
 }: {
   data: AppSnapshot;
   openCourse: () => void;
+  openImport: () => void;
   editCourse: (course: Course) => void;
   refresh: () => Promise<void>;
   notify: (value: string) => void;
@@ -782,6 +813,9 @@ function ScheduleView({
           <button className="button" onClick={openCourse}>
             إضافة مادة
           </button>
+          <button className="button secondary" onClick={openImport}>
+            استيراد الجدول
+          </button>
           {data.courses.length > 0 && (
             <button className="button secondary" onClick={exportAllIcs}>
               تصدير الجدول (ICS)
@@ -811,6 +845,24 @@ function ScheduleView({
         courses={data.courses}
         empty={`لا توجد جلسات يوم ${dayNames[day]}.`}
       />
+
+      {data.courses.length === 0 && (
+        <div className="card" style={{ textAlign: "center", padding: "32px 16px", marginTop: 24 }}>
+          <p className="eyebrow">جدولك فارغ حاليًا</p>
+          <h2>ابدأ بإنشاء جدولك الدراسي</h2>
+          <p className="muted" style={{ maxWidth: 440, margin: "0 auto 20px" }}>
+            يمكنك استيراد جدولك مباشرة برفع صورة أو ملف PDF، أو إضافة المواد والمحاضرات يدويًا.
+          </p>
+          <div className="actions" style={{ justifyContent: "center" }}>
+            <button className="button" onClick={openImport}>
+              استيراد الجدول (صورة أو PDF)
+            </button>
+            <button className="button secondary" onClick={openCourse}>
+              إضافة مادة يدويًا
+            </button>
+          </div>
+        </div>
+      )}
 
       {data.courses.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>

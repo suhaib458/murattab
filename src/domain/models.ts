@@ -16,10 +16,27 @@ export const StudentProfileSchema = z.object({ id: z.string().uuid(), name: z.st
 export const AppSettingsSchema = z.object({ id: z.literal("settings"), theme: z.enum(["light", "dark", "system"]), onboardingComplete: z.boolean(), splashShown: z.boolean(), activeTermId: z.string().uuid().nullable(), guideSeen: z.boolean(), schemaVersion: z.literal(1) });
 export const CalendarEventSchema = z.object({ id: z.string(), title: z.string(), startsAt: z.iso.datetime(), endsAt: z.iso.datetime(), description: z.string(), deepLink: z.string() });
 export const ExtractionIssueSchema = z.object({ field: z.string(), message: z.string(), severity: z.enum(["info", "warning", "error"]) });
-export const ScheduleImportDraftSchema = z.object({ courses: z.array(z.object({ name: z.string(), sessions: z.array(ClassSessionSchema) })), issues: z.array(ExtractionIssueSchema) });
+export const DraftSessionSchema = z.object({
+  id: z.string(),
+  courseId: z.string().optional(),
+  day: z.enum(dayCodes).nullable().optional(),
+  startsAt: z.string().nullable().optional(),
+  endsAt: z.string().nullable().optional(),
+  roomRaw: z.string(),
+  roomExpanded: z.string().optional(),
+  kind: z.enum(sessionKinds).optional()
+});
+export const DraftCourseSchema = z.object({
+  name: z.string(),
+  sessions: z.array(DraftSessionSchema)
+});
+export const ScheduleImportDraftSchema = z.object({
+  courses: z.array(DraftCourseSchema),
+  issues: z.array(ExtractionIssueSchema)
+});
 export const ScheduleExtractionResultSchema = z.object({ draft: ScheduleImportDraftSchema, confidence: z.record(z.string(), z.number().min(0).max(1)) });
 export const BackupSchema = z.object({ schemaVersion: z.literal(1), exportedAt: z.iso.datetime(), profile: StudentProfileSchema.nullable(), settings: AppSettingsSchema, terms: z.array(AcademicTermSchema), courses: z.array(CourseSchema), sessions: z.array(ClassSessionSchema) });
 
-export type Faculty = z.infer<typeof FacultySchema>; export type Major = z.infer<typeof MajorSchema>; export type UniversityConfig = z.infer<typeof UniversityConfigSchema>; export type AcademicTerm = z.infer<typeof AcademicTermSchema>; export type RoomLocation = z.infer<typeof RoomLocationSchema>; export type ReminderPreference = z.infer<typeof ReminderPreferenceSchema>; export type ClassSession = z.infer<typeof ClassSessionSchema>; export type Course = z.infer<typeof CourseSchema>; export type StudentProfile = z.infer<typeof StudentProfileSchema>; export type AppSettings = z.infer<typeof AppSettingsSchema>; export type CalendarEvent = z.infer<typeof CalendarEventSchema>; export type ExtractionIssue = z.infer<typeof ExtractionIssueSchema>; export type ScheduleImportDraft = z.infer<typeof ScheduleImportDraftSchema>;
+export type Faculty = z.infer<typeof FacultySchema>; export type Major = z.infer<typeof MajorSchema>; export type UniversityConfig = z.infer<typeof UniversityConfigSchema>; export type AcademicTerm = z.infer<typeof AcademicTermSchema>; export type RoomLocation = z.infer<typeof RoomLocationSchema>; export type ReminderPreference = z.infer<typeof ReminderPreferenceSchema>; export type ClassSession = z.infer<typeof ClassSessionSchema>; export type Course = z.infer<typeof CourseSchema>; export type StudentProfile = z.infer<typeof StudentProfileSchema>; export type AppSettings = z.infer<typeof AppSettingsSchema>; export type CalendarEvent = z.infer<typeof CalendarEventSchema>; export type ExtractionIssue = z.infer<typeof ExtractionIssueSchema>; export type DraftSession = z.infer<typeof DraftSessionSchema>; export type DraftCourse = z.infer<typeof DraftCourseSchema>; export type ScheduleImportDraft = z.infer<typeof ScheduleImportDraftSchema>; export type ScheduleExtractionResult = z.infer<typeof ScheduleExtractionResultSchema>;
 
-export interface ScheduleExtractor { extract(input: { fileName: string; bytes: Uint8Array }): Promise<z.infer<typeof ScheduleExtractionResultSchema>>; }
+export interface ScheduleExtractor { extract(input: { fileName: string; bytes: Uint8Array; mimeType?: string }): Promise<ScheduleExtractionResult>; }

@@ -11,21 +11,23 @@ export class LocalScheduleRepository implements ScheduleRepository {
   private courses = db.table<Course, string>("courses");
   private sessions = db.table<ClassSession, string>("sessions");
   private key = "murattab-fallback-v1";
+  private memoryFallback: AppSnapshot = { profile: null, settings: initialSettings, terms: [], courses: [], sessions: [] };
 
   private fallback(): AppSnapshot {
     if (typeof localStorage === "undefined") {
-      return { profile: null, settings: initialSettings, terms: [], courses: [], sessions: [] };
+      return this.memoryFallback;
     }
     try {
       const raw = localStorage.getItem(this.key);
-      if (!raw) return { profile: null, settings: initialSettings, terms: [], courses: [], sessions: [] };
+      if (!raw) return this.memoryFallback;
       return JSON.parse(raw) as AppSnapshot;
     } catch {
-      return { profile: null, settings: initialSettings, terms: [], courses: [], sessions: [] };
+      return this.memoryFallback;
     }
   }
 
   private saveFallback(snapshot: AppSnapshot): void {
+    this.memoryFallback = snapshot;
     if (typeof localStorage === "undefined") return;
     try {
       localStorage.setItem(this.key, JSON.stringify(snapshot));
@@ -118,22 +120,28 @@ export class LocalScheduleRepository implements ScheduleRepository {
   }
 
   async saveCourse(course: Course, sessions: ClassSession[]): Promise<void> {
+    await this.saveCourses([{ course, sessions }]);
+  }
+
+  async saveCourses(batch: Array<{ course: Course; sessions: ClassSession[] }>): Promise<void> {
     const current = await this.snapshot();
+    const incomingIds = new Set(batch.map((b) => b.course.id));
     const next: AppSnapshot = {
       ...current,
-      courses: [...current.courses.filter((item) => item.id !== course.id), course],
-      sessions: [...current.sessions.filter((item) => item.courseId !== course.id), ...sessions]
+      courses: [...current.courses.filter((item) => !incomingIds.has(item.id)), ...batch.map((b) => b.course)],
+      sessions: [...current.sessions.filter((item) => !incomingIds.has(item.courseId)), ...batch.flatMap((b) => b.sessions)]
     };
     this.saveFallback(next);
     try {
       await db.transaction("rw", this.courses, this.sessions, async () => {
-        await this.courses.put(course);
-        // Remove existing sessions for this course before putting new ones (handles edit!)
-        await this.sessions.where("courseId").equals(course.id).delete();
-        await this.sessions.bulkPut(sessions);
+        for (const item of batch) {
+          await this.courses.put(item.course);
+          await this.sessions.where("courseId").equals(item.course.id).delete();
+          await this.sessions.bulkPut(item.sessions);
+        }
       });
     } catch (err) {
-      console.warn("Dexie saveCourse failed:", err);
+      console.warn("Dexie saveCourses failed:", err);
     }
   }
 
