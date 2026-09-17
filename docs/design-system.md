@@ -1,6 +1,6 @@
 # نظام التصميم
 
-المصدر: `design-system/murattab/MASTER.md` الناتج من UI/UX Pro Max، مع تكييف الهوية المطلوبة: زمردي عميق، عاجي، mint باهت، وذهب محدود للتأكيد؛ لا أزرق أو بنفسجي أو gradients.
+المصدر: `docs/design-system/MASTER.md` الناتج من UI/UX Pro Max، مع تكييف الهوية المطلوبة: زمردي عميق، عاجي، mint باهت، وذهب محدود للتأكيد؛ لا أزرق أو بنفسجي أو gradients.
 
 الرموز الدلالية في `globals.css`: `background`, `surface`, `surface-muted`, `foreground`, `foreground-muted`, `primary`, `primary-foreground`, `accent`, `border`, `success`, `warning`, `destructive`, `focus-ring`. لا تُكتب قيم خام داخل JSX. الوضع الداكن تعيين مستقل وليس عكسًا آليًا.
 

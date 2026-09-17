@@ -195,3 +195,9 @@ export function calculateFreeTimeSlots(sessions: ClassSession[]): FreeTimeSlot[]
   return slots;
 }
 
+/** Map JS Date.getDay() (0=Sun…6=Sat) to the Arabic DayCode used by Murattab. Friday (5) returns null. */
+export function getDayCodeFromJsDay(jsDay: number): DayCode | null {
+  const map: Record<number, DayCode> = { 6: "س", 0: "ح", 1: "ن", 2: "ث", 3: "ر", 4: "خ" };
+  return map[jsDay] ?? null;
+}
+
