@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import styles from "./tour.module.css";
+import styles from "../tour.module.css";
 import {
   endTour as endTourStore,
   getServerTourSnapshot,
@@ -25,7 +25,7 @@ import {
   previousStep as previousStepStore,
   subscribeTour,
   TOUR_TOTAL
-} from "./tour-store";
+} from "../store/tour-store";
 
 export const CURRENT_GUIDE_VERSION = 1;
 
