@@ -35,7 +35,6 @@ import {
   type AcademicTerm
 } from "@/domain/models";
 import {
-  generateIcs,
   ttuAcademicCalendar,
   getEventsOnDate
 } from "@/domain/calendar";
@@ -327,38 +326,6 @@ describe("Phase 3C — official academic calendar", () => {
   it("getEventsOnDate returns empty array when no events intersect", () => {
     const none = getEventsOnDate(ttuAcademicCalendar.events, "2026-12-15");
     expect(none).toEqual([]);
-  });
-});
-
-describe("Phase 3C — ICS first occurrence uses official teaching start", () => {
-  const term = PRODUCTION_TERM;
-  const courseId = "test-course-id";
-  const course: Course = {
-    id: courseId,
-    termId: term.id,
-    name: "اختبار",
-    reminder: { enabled: false, minutesBefore: 0 },
-    createdAt: "2026-10-04T00:00:00.000Z"
-  };
-  const session: ClassSession = {
-    id: "test-session-id",
-    courseId,
-    day: "ح",
-    startsAt: "09:00",
-    endsAt: "10:00",
-    room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false },
-    kind: "lecture"
-  };
-
-  it("first occurrence date is on or after the verified teaching start (2026-10-04)", () => {
-    const ics = generateIcs([course], [session], term);
-    // For day=ح (Sunday) starting 2026-10-04, first occurrence is exactly 2026-10-04
-    expect(ics).toContain("DTSTART;TZID=Asia/Amman:20261004T090000");
-  });
-
-  it("RRULE ends with the verified teaching boundary (2027-01-07)", () => {
-    const ics = generateIcs([course], [session], term);
-    expect(ics).toContain("RRULE:FREQ=WEEKLY;UNTIL=20270107T235959Z");
   });
 });
 

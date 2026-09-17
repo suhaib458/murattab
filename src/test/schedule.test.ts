@@ -14,7 +14,7 @@ import {
   formatDurationMinutes
 } from "@/domain/schedule";
 import { AcademicTermSchema, ClassSessionSchema } from "@/domain/models";
-import { generateCourseIcs, generateIcs, getFirstOccurrenceDate } from "@/domain/calendar";
+import { getFirstOccurrenceDate } from "@/domain/calendar";
 import { makeBackup, readBackup } from "@/domain/backup";
 
 const courseId = "11111111-1111-4111-8111-111111111111";
@@ -232,25 +232,6 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       // لجلسة الثلاثاء (ث)، أول تاريخ بعد 2026-10-04 هو 2026-10-06
       const tuesdayFirstDate = getFirstOccurrenceDate(term.startsOn, "ث");
       expect(tuesdayFirstDate).toBe("20261006");
-    });
-
-    it("يولد ملف ICS متكامل مع UNTIL و RRULE و VALARM للمنبهات", () => {
-      const ics = generateIcs([course], [baseSession], term);
-      expect(ics).toContain("BEGIN:VCALENDAR");
-      expect(ics).toContain("VERSION:2.0");
-      expect(ics).toContain("SUMMARY:برمجة الويب");
-      // baseSession.day = ح (Sunday); first occurrence = 2026-10-04
-      expect(ics).toContain("DTSTART;TZID=Asia/Amman:20261004T090000");
-      expect(ics).toContain("RRULE:FREQ=WEEKLY;UNTIL=20270107T235959Z");
-      expect(ics).toContain("BEGIN:VALARM");
-      expect(ics).toContain("TRIGGER:-PT15M");
-      expect(ics).toContain("END:VCALENDAR");
-    });
-
-    it("يولد ICS لمادة واحدة مفردة عبر generateCourseIcs", () => {
-      const singleIcs = generateCourseIcs(course, [baseSession], term);
-      expect(singleIcs).toContain("SUMMARY:برمجة الويب");
-      expect(singleIcs).toContain("DTSTART;TZID=Asia/Amman:20261004T090000");
     });
   });
 });

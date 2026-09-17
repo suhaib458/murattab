@@ -2,12 +2,21 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { ttuConfig, isLegacyAcademicSelection, isResolvableAcademicId } from "@/config/ttu";
 import { makeBackup, readBackup } from "@/domain/backup";
 import { type AcademicCalendarEvent, type AppSettings, type ClassSession, type Course, type DayCode, type StudentProfile } from "@/domain/models";
+import { CURRENT_GUIDE_VERSION, TOUR_STEPS, TourOverlay } from "./tour-overlay";
+import {
+  autoTriggerTour,
+  endTour as endTourStore,
+  getOriginRoute,
+  getTourSnapshot,
+  startTour as startTourStore
+} from "./tour-store";
+import { CourseManagementDialog } from "./course-management-dialog";
 import {
   calculateFreeTimeSlots,
   dayNames,
@@ -19,7 +28,7 @@ import {
   orderedDays,
   sortSessions
 } from "@/domain/schedule";
-import { generateCourseIcs, generateIcs, getEventsOnDate, ttuAcademicCalendar } from "@/domain/calendar";
+import { getEventsOnDate, ttuAcademicCalendar } from "@/domain/calendar";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { LocalScheduleRepository } from "@/storage/local-repository";
 import { ImportDialog } from "./import-dialog";
@@ -38,11 +47,45 @@ type CourseForm = {
 };
 
 const navigation = [
-  { href: "/", label: "الرئيسية" },
-  { href: "/schedule", label: "جدولي" },
-  { href: "/calendar", label: "التقويم" },
-  { href: "/settings", label: "الإعدادات" }
+  { href: "/", label: "الرئيسية", icon: "home" as const, tourKey: "home" },
+  { href: "/schedule", label: "جدولي", icon: "schedule" as const, tourKey: "schedule" },
+  { href: "/calendar", label: "التقويم", icon: "calendar" as const, tourKey: "calendar" },
+  { href: "/settings", label: "الإعدادات", icon: "settings" as const, tourKey: "settings" }
 ];
+
+function NavIcon({ name }: { name: "home" | "schedule" | "calendar" | "settings" }) {
+  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  switch (name) {
+    case "home":
+      return (
+        <svg {...common}>
+          <path d="M3 11.5 12 4l9 7.5" />
+          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
+        </svg>
+      );
+    case "schedule":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+          <path d="M8 3v4M16 3v4M3.5 10h17" />
+        </svg>
+      );
+    case "calendar":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+          <path d="M8 3v4M16 3v4M3.5 10h17M7.5 14h3M13.5 14h3M7.5 17h3" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.86l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.86-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.86.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.86 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.86l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.86.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.86-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.86V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03Z" />
+        </svg>
+      );
+  }
+}
 
 const arabicMonths = [
   "كانون الثاني (يناير)",
@@ -88,22 +131,58 @@ const academicEventKindToken: Record<AcademicCalendarEvent["kind"], string> = {
 };
 
 export function MurattabApp() {
+  const router = useRouter();
   const pathname = usePathname();
   const [data, setData] = useState<AppSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showSplash, setShowSplash] = useState(false);
   const [online, setOnline] = useState(true);
-  const [modal, setModal] = useState<"course" | "restore" | "guide" | "import" | null>(null);
+  const [modal, setModal] = useState<"course" | "restore" | "import" | "manage" | null>(null);
+  const [returnToManage, setReturnToManage] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const refresh = async () => setData(await repo.snapshot());
+  const refresh = useCallback(async () => {
+    setData(await repo.snapshot());
+  }, []);
   const dismissSplash = useCallback(() => {
     if (typeof window !== "undefined") {
       sessionStorage.setItem("murattab-splash", "1");
     }
     setShowSplash(false);
   }, []);
+
+  // Auto-start the tour once per onboarding. Existing users who never set
+  // `guideAutoTrigger` (because they onboarded before this patch) are NOT
+  // shown the tour automatically. The user can always replay manually from
+  // Settings. See `CURRENT_GUIDE_VERSION` for the version field.
+  const startTour = useCallback(() => {
+    startTourStore(pathname);
+  }, [pathname]);
+  const endTour = useCallback(async () => {
+    const origin = getOriginRoute();
+    const snap = getTourSnapshot();
+    const currentStepRoute = TOUR_STEPS[snap.step]?.route;
+    endTourStore();
+    if (data) {
+      const next: AppSettings = {
+        ...data.settings,
+        completedGuideVersion: CURRENT_GUIDE_VERSION,
+        guideAutoTrigger: false,
+        guideSeen: true
+      };
+      try {
+        await repo.saveSettings(next);
+      } catch (err) {
+        console.error("Failed to persist tour state", err);
+      }
+    }
+    if (origin && (origin !== pathname || origin !== currentStepRoute)) {
+      router.push(origin);
+    } else {
+      await refresh();
+    }
+  }, [data, refresh, pathname, router]);
 
   useEffect(() => {
     void repo
@@ -163,6 +242,19 @@ export function MurattabApp() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modal, courseToEdit, notice]);
 
+  // First-run auto-trigger: runs once per client lifecycle when data is first available
+  // after onboarding. Guarded by `guideAutoTrigger`, version check, and autoTriggerTour
+  // so existing users are not interrupted and repeated repository refreshes / route changes do not re-trigger.
+  useEffect(() => {
+    if (!data) return;
+    if (!data.profile) return;
+
+    const completed = data.settings.completedGuideVersion ?? null;
+    if (data.settings.guideAutoTrigger === true && (completed == null || completed < CURRENT_GUIDE_VERSION)) {
+      autoTriggerTour();
+    }
+  }, [data]);
+
   useEffect(() => {
     const theme = data?.settings.theme;
     if (theme === "dark") {
@@ -213,13 +305,10 @@ export function MurattabApp() {
         setCourseToEdit(null);
         setModal("course");
       }}
-      editCourse={(course) => {
-        setCourseToEdit(course);
-        setModal("course");
-      }}
       openRestore={() => setModal("restore")}
-      openGuide={() => setModal("guide")}
       openImport={() => setModal("import")}
+      openManage={() => setModal("manage")}
+      startTour={startTour}
       refresh={refresh}
       notify={setNotice}
     />
@@ -233,10 +322,14 @@ export function MurattabApp() {
             <span className="brand-mark" aria-hidden="true" />
             مرتب
           </Link>
-          <div className={`status ${online ? "online" : ""}`}>{online ? "متصل" : "دون اتصال"}</div>
           <nav className="nav" aria-label="التنقل الرئيسي">
             {navigation.map((item) => (
-              <Link key={item.href} href={item.href} aria-current={active === item.href ? "page" : undefined}>
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active === item.href ? "page" : undefined}
+                data-tour={`${item.tourKey}-nav`}
+              >
                 {item.label}
               </Link>
             ))}
@@ -247,8 +340,14 @@ export function MurattabApp() {
 
       <nav className="bottom-nav" aria-label="التنقل الرئيسي للهاتف">
         {navigation.map((item) => (
-          <Link key={item.href} href={item.href} aria-current={active === item.href ? "page" : undefined}>
-            {item.label}
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active === item.href ? "page" : undefined}
+            data-tour={`${item.tourKey}-nav`}
+          >
+            <NavIcon name={item.icon} />
+            <span>{item.label}</span>
           </Link>
         ))}
       </nav>
@@ -260,12 +359,14 @@ export function MurattabApp() {
           data={data}
           courseToEdit={courseToEdit}
           close={() => {
-            setModal(null);
+            setModal(returnToManage ? "manage" : null);
             setCourseToEdit(null);
+            setReturnToManage(false);
           }}
           saved={async () => {
-            setModal(null);
+            setModal(returnToManage ? "manage" : null);
             setCourseToEdit(null);
+            setReturnToManage(false);
             await refresh();
           }}
         />
@@ -282,8 +383,27 @@ export function MurattabApp() {
         />
       )}
 
-      {modal === "guide" && (
-        <GuideModal close={() => setModal(null)} />
+      {modal === "manage" && data && (
+        <CourseManagementDialog
+          data={data}
+          editCourse={(course) => {
+            setCourseToEdit(course);
+            setReturnToManage(true);
+            setModal("course");
+          }}
+          openCourse={() => {
+            setCourseToEdit(null);
+            setReturnToManage(true);
+            setModal("course");
+          }}
+          close={() => {
+            setModal(null);
+            setReturnToManage(false);
+          }}
+          refresh={refresh}
+          notify={setNotice}
+          repo={repo}
+        />
       )}
 
       {modal === "import" && data && (
@@ -298,6 +418,10 @@ export function MurattabApp() {
           notify={setNotice}
         />
       )}
+
+      <TourOverlay
+        onComplete={() => void endTour()}
+      />
 
       {notice && (
         <div className="dialog-backdrop" role="alertdialog" aria-modal="true" aria-label="إشعار">
@@ -568,6 +692,8 @@ function Onboarding({
               splashShown: true,
               activeTermId: term.id,
               guideSeen: true,
+              completedGuideVersion: null,
+              guideAutoTrigger: true,
               schemaVersion: 1
             },
             term
@@ -739,20 +865,20 @@ function Dashboard({
   data,
   pathname,
   openCourse,
-  editCourse,
   openRestore,
-  openGuide,
   openImport,
+  openManage,
+  startTour,
   refresh,
   notify
 }: {
   data: AppSnapshot;
   pathname: string;
   openCourse: () => void;
-  editCourse: (course: Course) => void;
   openRestore: () => void;
-  openGuide: () => void;
   openImport: () => void;
+  openManage: () => void;
+  startTour: () => void;
   refresh: () => Promise<void>;
   notify: (value: string) => void;
 }) {
@@ -762,9 +888,6 @@ function Dashboard({
         data={data}
         openCourse={openCourse}
         openImport={openImport}
-        editCourse={editCourse}
-        refresh={refresh}
-        notify={notify}
       />
     );
   }
@@ -772,7 +895,16 @@ function Dashboard({
     return <CalendarView data={data} />;
   }
   if (pathname === "/settings") {
-    return <SettingsView data={data} openRestore={openRestore} openGuide={openGuide} refresh={refresh} notify={notify} />;
+    return <SettingsView
+      data={data}
+      openRestore={openRestore}
+      openImport={openImport}
+      openManage={openManage}
+      openCourse={openCourse}
+      startTour={startTour}
+      refresh={refresh}
+      notify={notify}
+    />;
   }
 
   // Home view
@@ -788,60 +920,45 @@ function Dashboard({
   const allEnded = todaySessions.length > 0 && !activeSession;
 
   const freeSlots = calculateFreeTimeSlots(todaySessions);
-
-  const exportIcs = () => {
-    const term = data.terms.find((item) => item.id === data.settings.activeTermId) ?? data.terms[0];
-    if (!term) return;
-    const blob = new Blob([generateIcs(data.courses, data.sessions, term)], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "murattab-schedule.ics";
-    link.click();
-    URL.revokeObjectURL(url);
-    notify("تم تصدير ملف التقويم للجدول كاملًا.");
-  };
+  const remainingTodaySessions = todaySessions.filter((s) => s.endsAt > nowTime);
 
   return (
     <>
       <section className="hero">
-        <div className="card">
-          <p className="eyebrow">أهلًا، {data.profile?.name}</p>
-          <h1>جدولك في مكانه الصحيح.</h1>
-          <p className="muted">أضف جلساتك يدويًا، ثم اعرضها بتفاصيل أوضح على يومك وتقويمك وصدّرها لهاتفك.</p>
-          <div className="actions">
-            <button className="button" onClick={openCourse}>
-              إضافة مادة يدويًا
-            </button>
-            <button className="button secondary" onClick={openImport}>
-              استيراد الجدول
-            </button>
-            {data.courses.length > 0 && (
-              <button className="button secondary" onClick={exportIcs}>
-                تصدير التقويم (ICS)
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="next-card">
+        <div className="next-card" aria-live="polite" data-tour="next-class">
           {currentSession && activeCourse ? (
             <>
               <p className="eyebrow">المحاضرة الحالية (جارية الآن)</p>
               <h2>{activeCourse.name}</h2>
-              <p>
-                {formatArabicTime(currentSession.startsAt)} — {formatArabicTime(currentSession.endsAt)}
-              </p>
-              <p className="muted">{currentSession.room.label}</p>
+              <div className="row">
+                <div>
+                  <div className="label">الوقت</div>
+                  <div className="value time">
+                    {formatArabicTime(currentSession.startsAt)} — {formatArabicTime(currentSession.endsAt)}
+                  </div>
+                </div>
+                <span className={`kind ${currentSession.kind === "lab" ? "lab" : ""}`}>
+                  {currentSession.kind === "lecture" ? "نظري" : currentSession.kind === "lab" ? "عملي" : "غير محدد"}
+                </span>
+              </div>
+              <p className="muted">القاعة: {currentSession.room.label}</p>
             </>
           ) : upcomingSession && activeCourse ? (
             <>
               <p className="eyebrow">المحاضرة القادمة</p>
               <h2>{activeCourse.name}</h2>
-              <p>
-                {formatArabicTime(upcomingSession.startsAt)} — {formatArabicTime(upcomingSession.endsAt)}
-              </p>
-              <p className="muted">{upcomingSession.room.label}</p>
+              <div className="row">
+                <div>
+                  <div className="label">الوقت</div>
+                  <div className="value time">
+                    {formatArabicTime(upcomingSession.startsAt)} — {formatArabicTime(upcomingSession.endsAt)}
+                  </div>
+                </div>
+                <span className={`kind ${upcomingSession.kind === "lab" ? "lab" : ""}`}>
+                  {upcomingSession.kind === "lecture" ? "نظري" : upcomingSession.kind === "lab" ? "عملي" : "غير محدد"}
+                </span>
+              </div>
+              <p className="muted">القاعة: {upcomingSession.room.label}</p>
             </>
           ) : allEnded ? (
             <>
@@ -887,9 +1004,9 @@ function Dashboard({
           </Link>
         </div>
         <SessionList
-          sessions={todaySessions}
+          sessions={remainingTodaySessions}
           courses={data.courses}
-          empty={todayCode ? `لا توجد جلسات مجدولة ليوم ${dayNames[todayCode]}.` : "لا توجد جلسات لهذا اليوم."}
+          empty={todayCode ? `لا توجد جلسات متبقية اليوم (${dayNames[todayCode]}).` : "لا توجد جلسات متبقية اليوم."}
         />
       </section>
     </>
@@ -907,22 +1024,23 @@ function SessionList({
 }) {
   if (!sessions.length) return <div className="card empty">{empty}</div>;
   return (
-    <div className="card">
+    <div style={{ display: "grid", gap: 10 }}>
       {sessions.map((session) => {
         const course = courses.find((item) => item.id === session.courseId);
         return (
-          <article className="session" key={session.id}>
+          <article className="session-card" key={session.id}>
             <div>
-              <span className={`kind ${session.kind === "lab" ? "lab" : ""}`}>
-                {session.kind === "lecture" ? "نظري" : session.kind === "lab" ? "عملي" : "غير محدد"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span className={`kind ${session.kind === "lab" ? "lab" : ""}`}>
+                  {session.kind === "lecture" ? "نظري" : session.kind === "lab" ? "عملي" : "غير محدد"}
+                </span>
+              </div>
               <h3>{course?.name ?? "مادة غير معروفة"}</h3>
-              <p className="muted">{session.room.label}</p>
+              <p className="room-line">{session.room.label}</p>
             </div>
-            <div className="time">
-              {formatArabicTime(session.startsAt)}
-              <br />
-              {formatArabicTime(session.endsAt)}
+            <div className="time-block">
+              <div className="start">{formatArabicTime(session.startsAt)}</div>
+              <div className="end">— {formatArabicTime(session.endsAt)}</div>
             </div>
           </article>
         );
@@ -934,47 +1052,14 @@ function SessionList({
 function ScheduleView({
   data,
   openCourse,
-  openImport,
-  editCourse,
-  refresh,
-  notify
+  openImport
 }: {
   data: AppSnapshot;
   openCourse: () => void;
   openImport: () => void;
-  editCourse: (course: Course) => void;
-  refresh: () => Promise<void>;
-  notify: (value: string) => void;
 }) {
   const [day, setDay] = useState<DayCode>("ح");
   const sessions = sortSessions(data.sessions.filter((item) => item.day === day));
-  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
-
-  const exportAllIcs = () => {
-    const term = data.terms.find((item) => item.id === data.settings.activeTermId) ?? data.terms[0];
-    if (!term) return;
-    const blob = new Blob([generateIcs(data.courses, data.sessions, term)], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "murattab-schedule.ics";
-    link.click();
-    URL.revokeObjectURL(url);
-    notify("تم تصدير ملف التقويم للجدول كاملًا.");
-  };
-
-  const exportSingleIcs = (course: Course) => {
-    const term = data.terms.find((item) => item.id === data.settings.activeTermId) ?? data.terms[0];
-    if (!term) return;
-    const blob = new Blob([generateCourseIcs(course, data.sessions, term)], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `murattab-${course.name}.ics`;
-    link.click();
-    URL.revokeObjectURL(url);
-    notify(`تم تصدير تقويم مادة ${course.name}.`);
-  };
 
   return (
     <section>
@@ -983,18 +1068,13 @@ function ScheduleView({
           <p className="eyebrow">جدولي</p>
           <h1>أسبوعك الدراسي</h1>
         </div>
-        <div className="actions">
+        <div className="actions" data-tour="schedule-actions">
           <button className="button" onClick={openCourse}>
             إضافة مادة
           </button>
           <button className="button secondary" onClick={openImport}>
             استيراد الجدول
           </button>
-          {data.courses.length > 0 && (
-            <button className="button secondary" onClick={exportAllIcs}>
-              تصدير الجدول (ICS)
-            </button>
-          )}
         </div>
       </div>
 
@@ -1021,7 +1101,7 @@ function ScheduleView({
       />
 
       {data.courses.length === 0 && (
-        <div className="card" style={{ textAlign: "center", padding: "32px 16px", marginTop: 24 }}>
+        <div className="card glass" style={{ textAlign: "center", padding: "32px 16px", marginTop: 24 }}>
           <p className="eyebrow">جدولك فارغ حاليًا</p>
           <h2>ابدأ بإنشاء جدولك الدراسي</h2>
           <p className="muted" style={{ maxWidth: 440, margin: "0 auto 20px" }}>
@@ -1034,66 +1114,6 @@ function ScheduleView({
             <button className="button secondary" onClick={openCourse}>
               إضافة مادة يدويًا
             </button>
-          </div>
-        </div>
-      )}
-
-      {data.courses.length > 0 && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="section-head">
-            <h2>إدارة المواد ({data.courses.length})</h2>
-          </div>
-          {data.courses.map((course) => {
-            const courseSessionsList = data.sessions.filter((s) => s.courseId === course.id);
-            return (
-              <div className="setting" key={course.id}>
-                <div>
-                  <strong>{course.name}</strong>
-                  <p className="muted">
-                    {courseSessionsList.length} جلسات أسبوعية
-                    {course.reminder.enabled ? ` · تنبيه قبل ${course.reminder.minutesBefore} د` : ""}
-                  </p>
-                </div>
-                <div className="actions">
-                  <button className="button secondary" onClick={() => editCourse(course)}>
-                    تعديل
-                  </button>
-                  <button className="button ghost" onClick={() => exportSingleIcs(course)} title="تصدير ICS لهذه المادة">
-                    تصدير
-                  </button>
-                  <button className="button danger" onClick={() => setCourseToDelete(course)}>
-                    حذف
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {courseToDelete && (
-        <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="del-course-title">
-          <div className="dialog">
-            <h2 id="del-course-title">تأكيد حذف المادة</h2>
-            <p>
-              هل أنت متأكد من حذف مادة <strong>«{courseToDelete.name}»</strong>؟ سيتم حذف جميع الجلسات المرتبطة بها في مختلف الأيام.
-            </p>
-            <div className="actions" style={{ marginTop: 20 }}>
-              <button
-                className="button danger"
-                onClick={async () => {
-                  await repo.deleteCourse(courseToDelete.id);
-                  setCourseToDelete(null);
-                  await refresh();
-                  notify("تم حذف المادة وجلساتها بنجاح.");
-                }}
-              >
-                نعم، احذف المادة
-              </button>
-              <button className="button ghost" onClick={() => setCourseToDelete(null)}>
-                إلغاء
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -1141,16 +1161,16 @@ function CalendarView({ data }: { data: AppSnapshot }) {
   return (
     <section>
       <p className="eyebrow">التقويم الشهري</p>
-      <h1>{arabicMonths[month]} {year}</h1>
+      <h1 style={{ marginBottom: 14 }}>{arabicMonths[month]} {year}</h1>
 
-      <div className="card">
+      <div className="calendar-shell">
         <div className="calendar-header">
           <button className="button secondary" onClick={prevMonth} aria-label="الشهر السابق">
-            &rarr; الشهر السابق
+            الشهر السابق
           </button>
           <h2>{arabicMonths[month]} {year}</h2>
           <button className="button secondary" onClick={nextMonth} aria-label="الشهر التالي">
-            الشهر التالي &larr;
+            الشهر التالي
           </button>
         </div>
 
@@ -1177,26 +1197,30 @@ function CalendarView({ data }: { data: AppSnapshot }) {
 
             return (
               <button
-                className={`day-cell ${sessionCount ? "has-session" : ""} ${isSelected ? "selected" : ""} ${isToday(date) ? "today" : ""} ${cellEvents.length ? "has-event" : ""}`}
+                className={`day-cell ${sessionCount ? "has-session" : ""} ${isSelected ? "selected" : ""} ${isToday(date) ? "today" : ""}`}
                 key={date}
                 onClick={() => setSelectedDayNum(date)}
                 aria-label={`${date} ${arabicMonths[month]}، ${sessionCount} جلسات${cellEvents.length ? `، ${cellEvents.length} أحداث` : ""}`}
               >
-                <span>{date}</span>
-                {cellEvents.length > 0 && (
-                  <span
-                    className="badge event-badge"
-                    title={cellEvents.map((e) => `${academicEventKindLabel[e.kind]}: ${e.title}`).join("\n")}
-                    style={{ backgroundColor: academicEventKindToken[cellEvents[0].kind] }}
-                  >
-                    {cellEvents.length === 1 ? academicEventKindLabel[cellEvents[0].kind] : cellEvents.length}
-                  </span>
-                )}
-                {sessionCount > 0 && (
-                  <span className="badge" title={`${sessionCount} محاضرات`}>
-                    {sessionCount}
-                  </span>
-                )}
+                <span className="day-num">{date}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                  {cellEvents.length > 0 && (
+                    <span
+                      className="event-strip"
+                      title={cellEvents.map((e) => `${academicEventKindLabel[e.kind]}: ${e.title}`).join("\n")}
+                      aria-label={`${cellEvents.length} أحداث`}
+                    >
+                      {cellEvents.slice(0, 3).map((e) => (
+                        <span key={e.id} className={`event-dot ${e.kind}`} />
+                      ))}
+                    </span>
+                  )}
+                  {sessionCount > 0 && (
+                    <span className="badge" title={`${sessionCount} محاضرات`}>
+                      {sessionCount}
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -1220,11 +1244,9 @@ function CalendarView({ data }: { data: AppSnapshot }) {
       />
 
       {selectedEvents.length > 0 && (
-        <section className="card" style={{ marginTop: 16 }} aria-label={`أحداث التقويم الأكاديمي ليوم ${safeSelected} ${arabicMonths[month]}`}>
-          <div className="section-head">
-            <h2>أحداث التقويم الأكاديمي</h2>
-          </div>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
+        <section className="settings-group" style={{ marginTop: 16 }} aria-label={`أحداث التقويم الأكاديمي ليوم ${safeSelected} ${arabicMonths[month]}`}>
+          <h3>أحداث التقويم الأكاديمي</h3>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
             {selectedEvents.map((event) => (
               <li
                 key={event.id}
@@ -1232,24 +1254,23 @@ function CalendarView({ data }: { data: AppSnapshot }) {
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
-                  padding: "10px 12px",
+                  padding: "12px 14px",
                   background: "var(--surface-muted)",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)"
+                  borderRadius: "var(--radius-md)"
                 }}
               >
                 <span
                   aria-hidden="true"
                   style={{
                     display: "inline-block",
-                    minWidth: 8,
-                    height: 32,
-                    borderRadius: 4,
+                    minWidth: 6,
+                    height: 28,
+                    borderRadius: 3,
                     backgroundColor: academicEventKindToken[event.kind]
                   }}
                 />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{event.title}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{event.title}</div>
                   <div className="muted" style={{ fontSize: "0.85rem" }}>
                     {event.endsOn && event.endsOn !== event.startsOn
                       ? `${event.startsOn} → ${event.endsOn}`
@@ -1270,13 +1291,19 @@ function CalendarView({ data }: { data: AppSnapshot }) {
 function SettingsView({
   data,
   openRestore,
-  openGuide,
+  openImport,
+  openManage,
+  openCourse,
+  startTour,
   refresh,
   notify
 }: {
   data: AppSnapshot;
   openRestore: () => void;
-  openGuide: () => void;
+  openImport: () => void;
+  openManage: () => void;
+  openCourse: () => void;
+  startTour: () => void;
   refresh: () => Promise<void>;
   notify: (value: string) => void;
 }) {
@@ -1303,87 +1330,270 @@ function SettingsView({
   const facultyName = ttuConfig.faculties.find((f) => f.id === data.profile?.facultyId)?.name ?? "كلية عامة";
   const majorName = ttuConfig.majors.find((m) => m.id === data.profile?.majorId)?.name ?? "تخصص عام";
 
+  const profileName = data.profile?.name ?? "طالب";
+  const profileInitials = (() => {
+    const parts = profileName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "م";
+    if (parts.length === 1) return parts[0].slice(0, 1);
+    return (parts[0][0] + parts[parts.length - 1][0]);
+  })();
+
+  const setTheme = (value: AppSettings["theme"]) => {
+    void update({ theme: value });
+  };
+
   return (
-    <section>
+    <section className="settings-shell">
       <p className="eyebrow">الإعدادات</p>
-      <h1>إعداداتك المحلية</h1>
+      <h1 style={{ marginBottom: 16 }}>الإعدادات</h1>
 
-      <div className="card settings">
-        <div className="setting">
-          <div>
-            <h2>المظهر</h2>
-            <p className="muted">اختر الوضع الفاتح أو الداكن أو اتباع إعداد النظام.</p>
-          </div>
-          <select
-            aria-label="المظهر"
-            value={data.settings.theme}
-            onChange={(event) => void update({ theme: event.target.value as AppSettings["theme"] })}
-          >
-            <option value="system">إعداد الجهاز</option>
-            <option value="light">فاتح</option>
-            <option value="dark">داكن</option>
-          </select>
+      <div className="profile-card" aria-label="بطاقة الطالب">
+        <div className="avatar" aria-hidden="true">
+          <span>{profileInitials}</span>
         </div>
+        <div className="body">
+          <h2>{profileName}</h2>
+          <p>{ttuConfig.name}</p>
+          <p className="meta">
+            <span>{facultyName}</span>
+            <span>·</span>
+            <span>{majorName}</span>
+          </p>
+        </div>
+      </div>
 
-        <div className="setting">
-          <div>
+      <div className="settings-group" aria-label="المظهر">
+        <h3>المظهر</h3>
+        <div className="setting" style={{ display: "block" }}>
+          <div style={{ marginBottom: 10 }}>
+            <h2>الوضع</h2>
+            <p className="muted">فاتح، داكن، أو تلقائي حسب جهازك.</p>
+          </div>
+          <div className="segmented" role="group" aria-label="اختر وضع المظهر">
+            <button
+              type="button"
+              aria-pressed={data.settings.theme === "light"}
+              onClick={() => setTheme("light")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+              فاتح
+            </button>
+            <button
+              type="button"
+              aria-pressed={data.settings.theme === "dark"}
+              onClick={() => setTheme("dark")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+              </svg>
+              داكن
+            </button>
+            <button
+              type="button"
+              aria-pressed={data.settings.theme === "system"}
+              onClick={() => setTheme("system")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="13" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+              تلقائي
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-group" aria-label="الأكاديمي">
+        <h3>الأكاديمي</h3>
+        <div className="settings-row" role="group" aria-label="الفصل الأكاديمي">
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <rect x="3" y="5" width="18" height="16" rx="2" />
+              <path d="M3 9h18M8 3v4M16 3v4" />
+            </svg>
+          </span>
+          <div className="row-body">
             <h2>الفصل الأكاديمي الحالي</h2>
-            <p className="muted">
-              {activeTerm ? `${activeTerm.name} (${activeTerm.startsOn} إلى ${activeTerm.endsOn})` : "غير محدد"}
+            <p>
+              {activeTerm ? `${activeTerm.name} (${activeTerm.startsOn} → ${activeTerm.endsOn})` : "غير محدد"}
             </p>
           </div>
         </div>
-
-        <div className="setting">
-          <div>
-            <h2>الملف الأكاديمي المحلي</h2>
-            <p className="muted">
-              {data.profile?.name} · {facultyName} — {majorName} ({ttuConfig.name})
-            </p>
+        <div className="settings-row" role="group" aria-label="الملف الأكاديمي">
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M4 7h16M4 12h16M4 17h10" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>الملف الأكاديمي</h2>
+            <p>{facultyName} · {majorName}</p>
           </div>
         </div>
+      </div>
 
-        <div className="setting">
-          <div>
-            <h2>النسخة الاحتياطية (JSON)</h2>
-            <p className="muted">تصدير واستعادة جدولك وملفك المحلي بصيغة JSON دون حاجة إلى أي خادم.</p>
+      <div className="settings-group" aria-label="الجدول">
+        <h3>الجدول</h3>
+        <button
+          type="button"
+          className="settings-row"
+          onClick={openManage}
+          data-tour="course-management"
+        >
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M4 5h16v4H4zM4 12h16v4H4zM4 19h16" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>إدارة المواد</h2>
+            <p>تعديل أو حذف المواد المسجلة في جدولك ({data.courses.length})</p>
           </div>
-          <div className="actions">
-            <button className="button secondary" onClick={download}>
-              تصدير
-            </button>
-            <button className="button ghost" onClick={openRestore}>
-              استعادة
-            </button>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+        <button type="button" className="settings-row" onClick={openImport}>
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M12 9v6M9 12h6M7 3v2M17 3v2" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>استيراد جدول</h2>
+            <p>تحليل صورة أو PDF لجدولك ومراجعته قبل الحفظ.</p>
           </div>
-        </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+        <Link href="/calendar" className="settings-row" aria-label="افتح التقويم الأكاديمي">
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <rect x="3" y="5" width="18" height="15" rx="2" />
+              <path d="M8 3v4M16 3v4M3.5 10h17" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>التقويم الأكاديمي</h2>
+            <p>عرض أحداث الفصل الرسمي للجامعة.</p>
+          </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </Link>
+      </div>
 
-        <div className="setting">
-          <div>
-            <h2>الدليل الإرشادي</h2>
-            <p className="muted">استعراض دليل استخدام مرتب التأسيسي في أي وقت.</p>
+      <div className="settings-group" aria-label="البيانات والنسخ الاحتياطي">
+        <h3>البيانات والنسخ الاحتياطي</h3>
+        <button type="button" className="settings-row" onClick={download}>
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M12 4v12M6 12l6 6 6-6M4 20h16" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>تصدير نسخة احتياطية</h2>
+            <p>احفظ ملف JSON لجدولك وملفك على جهازك.</p>
           </div>
-          <button className="button secondary" onClick={openGuide}>
-            فتح الدليل
-          </button>
-        </div>
-
-        <div className="setting">
-          <div>
-            <h2>إدارة البيانات المحلية</h2>
-            <p className="muted">حذف جميع المواد والملف والإعدادات المحلية من هذا المتصفح نهائيًا.</p>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+        <button type="button" className="settings-row" onClick={openRestore}>
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M12 20V8M6 14l6-6 6 6M4 4h16" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>استعادة نسخة احتياطية</h2>
+            <p>استرجع بياناتك من ملف JSON محفوظ مسبقًا.</p>
           </div>
-          <button className="button danger" onClick={() => setConfirmClear(true)}>
-            حذف جميع البيانات
-          </button>
-        </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => setConfirmClear(true)}>
+          <span className="row-icon danger" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>حذف جميع البيانات</h2>
+            <p>مسح كامل للملف والمواد والجلسات من هذا المتصفح.</p>
+          </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+      </div>
 
-        <div className="setting">
-          <div>
+      <div className="settings-group" aria-label="المساعدة">
+        <h3>المساعدة</h3>
+        <button type="button" className="settings-row" onClick={startTour} data-tour="replay-guide">
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .8-1.5 1.3-1.5 2.5M12 17h.01" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>دليل استخدام «مرتب»</h2>
+            <p>تعرّف على أهم مزايا التطبيق خطوة بخطوة</p>
+          </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+        <button type="button" className="settings-row" onClick={openCourse}>
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <div className="row-body">
+            <h2>إضافة مادة يدويًا</h2>
+            <p>افتح نموذج إضافة مادة جديدة لجدولك.</p>
+          </div>
+          <span className="row-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
+      </div>
+
+      <div className="settings-group" aria-label="حول التطبيق">
+        <h3>حول التطبيق</h3>
+        <div className="settings-row" role="group" aria-label="الخصوصية والإصدار">
+          <span className="row-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
+            </svg>
+          </span>
+          <div className="row-body">
             <h2>الخصوصية والإصدار</h2>
-            <p className="muted">
-              مرتب 0.1.0 · تطبيق محلي (Local-first) مخصص لجامعة الطفيلة التقنية. لا تُرسل بيانات الطالب أو جدوله إلى أي خادم خارجي.
-            </p>
+            <p>مرتب 0.1.0 · محلي بالكامل. لا تُرسل بياناتك إلى أي خادم.</p>
           </div>
         </div>
       </div>
@@ -1705,58 +1915,6 @@ function RestoreDialog({ close, restored }: { close: () => void; restored: () =>
         <div className="actions" style={{ marginTop: 16 }}>
           <button className="button ghost" onClick={close}>
             إلغاء
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function GuideModal({ close }: { close: () => void }) {
-  return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="guide-title">
-      <div className="dialog">
-        <div className="section-head">
-          <h2 id="guide-title">دليل استخدام «مرتب»</h2>
-          <button className="button ghost" onClick={close} aria-label="إغلاق">
-            إغلاق
-          </button>
-        </div>
-        <div style={{ display: "grid", gap: 16, marginTop: 10 }}>
-          <article>
-            <h3>1. إضافة وإدارة المواد</h3>
-            <p className="muted">
-              يمكنك إضافة مواد جدولك من شاشة «الرئيسية» أو «جدولي». تدعم المادة الواحدة جلسات متعددة على أيام مختلفة مع تحديد القاعة ونوع الجلسة (نظري أو عملي).
-            </p>
-          </article>
-          <article>
-            <h3>2. كشف تعارض المواعيد</h3>
-            <p className="muted">
-              يفحص التطبيق تلقائيًا أي تداخل بين الجلسات في نفس اليوم والوقت، وينبهك فورًا باسم المادة المتعارضة مع إمكانية تأكيد الحفظ إذا رغبت.
-            </p>
-          </article>
-          <article>
-            <h3>3. متابعة اليوم وأوقات الفراغ</h3>
-            <p className="muted">
-              تعرض لك الشاشة الرئيسية محاضرتك الحالية أو القادمة، وتحسب لك فترات الفراغ والاستراحة بين المحاضرات خلال يومك الدراسي.
-            </p>
-          </article>
-          <article>
-            <h3>4. تصدير التقويم (ICS)</h3>
-            <p className="muted">
-              يمكنك تصدير جدولك بالكامل أو مادة بعينها بصيغة تقويم قياسية واستيرادها مباشرة في تقويم هاتفك (Google Calendar أو Apple Calendar).
-            </p>
-          </article>
-          <article>
-            <h3>5. أمان وحفظ البيانات (Local-first)</h3>
-            <p className="muted">
-              بياناتك تبقى على جهازك دائمًا. استخدم خاصية «النسخة الاحتياطية» في الإعدادات لحفظ ملف جدولك أو نقله لجهاز آخر بأمان.
-            </p>
-          </article>
-        </div>
-        <div className="actions" style={{ marginTop: 24 }}>
-          <button className="button" onClick={close}>
-            فهمت ذلك
           </button>
         </div>
       </div>

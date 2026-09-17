@@ -22,7 +22,7 @@ export const ReminderPreferenceSchema = z.object({ enabled: z.boolean(), minutes
 export const ClassSessionSchema = z.object({ id: z.string().uuid(), courseId: z.string().uuid(), day: z.enum(dayCodes), startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), endsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), room: RoomLocationSchema, kind: z.enum(sessionKinds) }).refine((v) => v.endsAt > v.startsAt, { message: "وقت النهاية يجب أن يأتي بعد وقت البداية.", path: ["endsAt"] });
 export const CourseSchema = z.object({ id: z.string().uuid(), termId: z.string().uuid(), name: z.string().min(1), reminder: ReminderPreferenceSchema, createdAt: z.iso.datetime() });
 export const StudentProfileSchema = z.object({ id: z.string().uuid(), name: z.string().min(1), universityId: z.string(), facultyId: z.string().uuid(), majorId: z.string().uuid(), createdAt: z.iso.datetime() });
-export const AppSettingsSchema = z.object({ id: z.literal("settings"), theme: z.enum(["light", "dark", "system"]), onboardingComplete: z.boolean(), splashShown: z.boolean(), activeTermId: z.string().uuid().nullable(), guideSeen: z.boolean(), schemaVersion: z.literal(1) });
+export const AppSettingsSchema = z.object({ id: z.literal("settings"), theme: z.enum(["light", "dark", "system"]), onboardingComplete: z.boolean(), splashShown: z.boolean(), activeTermId: z.string().uuid().nullable(), guideSeen: z.boolean().optional(), completedGuideVersion: z.number().int().nullable().optional(), guideAutoTrigger: z.boolean().optional(), schemaVersion: z.literal(1) });
 export const CalendarEventSchema = z.object({ id: z.string(), title: z.string(), startsAt: z.iso.datetime(), endsAt: z.iso.datetime(), description: z.string(), deepLink: z.string() });
 
 /**

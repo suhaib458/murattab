@@ -1,3 +1,7 @@
+/* Splash — preserved from Phase 1, aligned with Phase 3.5 tokens.
+   Mobile fullscreen video, desktop centered, reduced-motion fallback.
+   Do not change video source, PWA manifest, or logo assets. */
+
 .splash {
   position: fixed;
   inset: 0;
@@ -9,9 +13,9 @@
   background: var(--background);
   color: var(--foreground);
   text-align: center;
+  padding: 24px;
 }
 
-/* Mobile Fullscreen Video Splash (Full Viewport, 100dvh, Video Only) */
 .splash.splash-fullscreen {
   position: fixed;
   inset: 0;
@@ -40,7 +44,6 @@
   background: #0d0809;
 }
 
-/* Fallback centered logo for reduced-motion or video error */
 .splash.splash-fallback {
   position: fixed;
   inset: 0;
@@ -61,13 +64,8 @@
   height: 120px;
   border-radius: 24px;
   object-fit: contain;
-  box-shadow: 0 12px 32px rgba(122, 24, 39, 0.16);
+  box-shadow: var(--shadow-lg);
   display: block;
-}
-
-/* Desktop Splash */
-.splash.splash-desktop {
-  padding: 24px;
 }
 
 .splash.splash-desktop .splash-content {
@@ -85,6 +83,38 @@
   height: 120px;
   border-radius: 24px;
   object-fit: contain;
-  box-shadow: 0 12px 32px rgba(122, 24, 39, 0.16);
+  box-shadow: var(--shadow-lg);
   display: block;
+}
+
+.splash.splash-desktop video {
+  width: min(280px, 72vw);
+  aspect-ratio: 9/16;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
+  background: transparent;
+  display: block;
+}
+
+.splash-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  object-fit: contain;
+  box-shadow: var(--shadow-lg);
+  display: block;
+}
+
+.splash-skip { margin-top: 6px; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash.splash-desktop .splash-content { animation: none; }
 }

@@ -1,0 +1,165 @@
+/* Phase 3.5C — Interactive guided tour overlay */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  isolation: isolate;
+}
+
+.fullBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(36, 22, 22, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.spotlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.spotlight path {
+  fill: rgba(36, 22, 22, 0.55);
+  /* The dim fill + a transparent inner ring draws the spotlight hole. */
+  fill-rule: evenodd;
+}
+
+.tooltipMeasure {
+  position: absolute;
+  left: -10000px;
+  top: -10000px;
+  width: 320px;
+  min-height: 180px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.card,
+.finalCard {
+  position: absolute;
+  width: min(360px, calc(100vw - 24px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 48px rgba(28, 14, 12, 0.28);
+  padding: 18px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  z-index: 1;
+  outline: none;
+}
+.card:focus-visible,
+.finalCard:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.finalCard,
+.centeredCard {
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%);
+  text-align: start;
+  opacity: 1 !important;
+}
+
+.finalCard {
+  width: min(420px, calc(100vw - 24px));
+}
+
+.centeredCard {
+  width: min(380px, calc(100vw - 24px));
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-brand, "Alexandria"), system-ui, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.body {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--foreground-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.primary,
+.secondary {
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+  padding: 0 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--motion-fast, 160ms) var(--motion-ease, ease-out);
+}
+
+.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+.primary:hover { filter: brightness(1.05); }
+.primary:focus-visible { outline-offset: 3px; }
+
+.secondary {
+  background: transparent;
+  color: var(--foreground-muted);
+  border-color: var(--border);
+}
+.secondary:hover { color: var(--foreground); background: var(--surface-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight,
+  .primary,
+  .secondary,
+  .card,
+  .finalCard {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .card,
+  .finalCard {
+    width: min(360px, calc(100vw - 24px));
+  }
+  /* On very small screens the coach card sticks to the bottom so it never
+     collides with the floating bottom navigation. */
+  .card {
+    left: 12px !important;
+    right: 12px !important;
+    width: auto;
+    top: auto !important;
+    bottom: calc(12px + var(--safe-bottom, 0px) + 64px) !important;
+  }
+}

@@ -27,9 +27,16 @@ test.describe("Smart Schedule Import - استيراد الجدول بالذكا�
       await page.getByRole("combobox", { name: "الكلية", exact: true }).selectOption({ label: "كلية تكنولوجيا المعلومات والاتصالات" });
       await page.getByRole("combobox", { name: "التخصص", exact: true }).selectOption({ label: "علم الحاسوب /الذكاء الاصطناعي وعلم البيانات" });
       await page.getByRole("button", { name: "ابدأ مع مرتب" }).click();
+      const tour = page.getByRole("dialog", { name: "محاضرتك القادمة" });
+      if (await tour.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
+        await page.keyboard.press("Escape");
+        await expect(tour).toBeHidden({ timeout: 4000 });
+      }
     }
 
-    await expect(page.getByRole("button", { name: "استيراد الجدول" }).first()).toBeVisible({ timeout: 12000 });
+    // Phase 3.5B: "استيراد الجدول" lives on /schedule, not on /.
+    await page.getByRole("link", { name: "جدولي" }).last().click();
+    await expect(page.getByRole("button", { name: "استيراد الجدول", exact: true })).toBeVisible({ timeout: 12000 });
   });
 
   test("عرض رسالة الخطأ عند فشل التحليل أو عدم تهيئة المفتاح", async ({ page }) => {

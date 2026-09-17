@@ -2,7 +2,7 @@ import { AppSettingsSchema, AcademicTermSchema, type AcademicTerm, type AppSetti
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { db } from "./db";
 
-export const initialSettings: AppSettings = { id: "settings", theme: "system", onboardingComplete: false, splashShown: false, activeTermId: null, guideSeen: false, schemaVersion: 1 };
+export const initialSettings: AppSettings = { id: "settings", theme: "system", onboardingComplete: false, splashShown: false, activeTermId: null, guideSeen: false, completedGuideVersion: null, guideAutoTrigger: false, schemaVersion: 1 };
 
 /**
  * Production AcademicTerm for the verified TTU 2026/2027 first semester.
