@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { ttuConfig } from "@/config/ttu";
 import type { AppSettings, StudentProfile } from "@/domain/models";
+import { generateId } from "@/lib/uuid";
 
 export function Onboarding({
   onComplete
@@ -59,7 +60,7 @@ export function Onboarding({
             return;
           }
           const profile: StudentProfile = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             name: values.name.trim(),
             universityId: "ttu",
             facultyId: values.facultyId,
@@ -69,7 +70,7 @@ export function Onboarding({
           // Production AcademicTerm: first semester 2026/2027.
           // teaching start = 2026-10-04, last teaching day = 2027-01-07 (verified)
           const term = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             name: "الفصل الدراسي الأول 2026/2027",
             startsOn: "2026-10-04",
             endsOn: "2027-01-07",

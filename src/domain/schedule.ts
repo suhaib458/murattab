@@ -1,4 +1,5 @@
 import type { ClassSession, Course, DayCode, RoomLocation } from "./models";
+import { generateId } from "@/lib/uuid";
 
 export const orderedDays: DayCode[] = ["س", "ح", "ن", "ث", "ر", "خ"];
 export const dayNames: Record<DayCode, string> = { س: "السبت", ح: "الأحد", ن: "الاثنين", ث: "الثلاثاء", ر: "الأربعاء", خ: "الخميس" };
@@ -139,7 +140,7 @@ export function makeSessions(input: {
   kind: ClassSession["kind"];
 }): ClassSession[] {
   return input.days.map((day) => ({
-    id: crypto.randomUUID(),
+    id: generateId(),
     courseId: input.courseId,
     day,
     startsAt: input.startsAt,

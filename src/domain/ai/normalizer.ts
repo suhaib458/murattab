@@ -8,6 +8,7 @@ import {
 } from "../models";
 import { expandRoom, getIctLabLabel, orderedDays } from "../schedule";
 import type { RawCourseExtraction, RawExtractionResponse, RawSessionExtraction } from "./extraction-schema";
+import { generateId } from "@/lib/uuid";
 
 /**
  * Maps Arabic day names or letters to standard DayCode values.
@@ -152,7 +153,7 @@ export function normalizeExtractionResult(raw: RawExtractionResponse): ScheduleE
   }
 
   raw.courses.forEach((courseRaw: RawCourseExtraction, cIndex: number) => {
-    const courseId = crypto.randomUUID();
+    const courseId = generateId();
     const rawName = courseRaw.courseName.trim();
     // Do NOT invent names such as "مادة غير مسماة 1"
     const courseName = rawName;
@@ -252,7 +253,7 @@ export function normalizeExtractionResult(raw: RawExtractionResponse): ScheduleE
       // If NO day was parsed, create a SINGLE DraftSession with day: null (do NOT invent Sunday!).
       if (days.length > 0) {
         for (const day of days) {
-          const sessionId = crypto.randomUUID();
+          const sessionId = generateId();
           confidenceRecord[`session_${sessionId}_day`] = dayConfidence;
           confidenceRecord[`session_${sessionId}_time`] = timeConfidence;
           confidenceRecord[`session_${sessionId}_room`] = roomConfidence;
@@ -269,7 +270,7 @@ export function normalizeExtractionResult(raw: RawExtractionResponse): ScheduleE
           });
         }
       } else {
-        const sessionId = crypto.randomUUID();
+        const sessionId = generateId();
         confidenceRecord[`session_${sessionId}_day`] = 0;
         confidenceRecord[`session_${sessionId}_time`] = timeConfidence;
         confidenceRecord[`session_${sessionId}_room`] = roomConfidence;

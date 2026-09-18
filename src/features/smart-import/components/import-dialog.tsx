@@ -6,6 +6,7 @@ import type { ClassSession, Course, DayCode, ExtractionIssue, RoomLocation, Sche
 import { dayNames, expandRoom, findConflicts, formatArabicTime, getIctLabLabel, orderedDays } from "@/domain/schedule";
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
+import { generateId } from "@/lib/uuid";
 
 interface ImportDialogProps {
   data: AppSnapshot;
@@ -189,12 +190,12 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
           data.courses.some((ec) => ec.name.trim().toLowerCase() === c.name.trim().toLowerCase())
         );
         return {
-          tempId: crypto.randomUUID(),
+          tempId: generateId(),
           name: c.name || "",
           nameConfidence: result.confidence[`course_${c.sessions[0]?.courseId}_name`] ?? 0.9,
           duplicateAction: isDuplicate ? "replace" : "add",
           sessions: c.sessions.map((s) => ({
-            id: s.id || crypto.randomUUID(),
+            id: s.id || generateId(),
             day: s.day || "",
             startsAt: s.startsAt || "",
             endsAt: s.endsAt || "",
@@ -248,12 +249,12 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
   const addMissingCourse = () => {
     const newCourse: EditableCourse = {
-      tempId: crypto.randomUUID(),
+      tempId: generateId(),
       name: "مادة جديدة",
       duplicateAction: "add",
       sessions: [
         {
-          id: crypto.randomUUID(),
+          id: generateId(),
           day: "ح",
           startsAt: "08:30",
           endsAt: "09:30",
@@ -282,7 +283,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       prev.map((c) => {
         if (c.tempId !== courseTempId) return c;
         const newSession: EditableSession = {
-          id: crypto.randomUUID(),
+          id: generateId(),
           day: "",
           startsAt: "",
           endsAt: "",
@@ -392,7 +393,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
     setIsSaving(true);
     try {
-      const termId = data.settings.activeTermId || data.terms[0]?.id || crypto.randomUUID();
+      const termId = data.settings.activeTermId || data.terms[0]?.id || generateId();
 
       // Handle replacement: delete existing courses marked for replacement
       for (const ec of extractedCourses) {
@@ -410,7 +411,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       const batchToSave: Array<{ course: Course; sessions: ClassSession[] }> = [];
 
       for (const ec of activeReviewCourses) {
-        const courseId = crypto.randomUUID();
+        const courseId = generateId();
         const course: Course = {
           id: courseId,
           termId,
@@ -420,7 +421,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
         };
 
         const sessions: ClassSession[] = ec.sessions.map((s) => ({
-          id: crypto.randomUUID(),
+          id: generateId(),
           courseId,
           day: s.day as DayCode,
           startsAt: s.startsAt,

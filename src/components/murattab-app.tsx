@@ -28,6 +28,7 @@ import { NavIcon } from "@/components/shared/nav-icon";
 import { Splash } from "@/components/shared/splash";
 import { CourseDialog } from "@/components/shared/course-dialog";
 import { RestoreDialog } from "@/components/shared/restore-dialog";
+import { MurattabProvider, type MurattabContextValue } from "@/components/murattab-context";
 
 const repo = new LocalScheduleRepository();
 
@@ -38,9 +39,10 @@ const navigation = [
   { href: "/settings", label: "الإعدادات", icon: "settings" as const, tourKey: "settings" }
 ];
 
-export function MurattabApp() {
+export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const router = useRouter();
   const pathname = usePathname();
+
   const [data, setData] = useState<AppSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showSplash, setShowSplash] = useState(false);
@@ -95,7 +97,9 @@ export function MurattabApp() {
   useEffect(() => {
     void repo
       .snapshot()
-      .then((snapshot) => setData(snapshot))
+      .then((snapshot) => {
+        setData(snapshot);
+      })
       .catch((error: unknown) => {
         console.error("Murattab storage error", error);
         setLoadError(error instanceof Error ? error.message : "تعذر فتح التخزين المحلي");
@@ -163,13 +167,24 @@ export function MurattabApp() {
     }
   }, [data]);
 
+  const theme = data?.settings.theme;
+
   useEffect(() => {
-    const theme = data?.settings.theme;
+    if (!theme) return;
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("murattab-theme", theme);
+      } catch {
+        // ignore in restricted storage environments
+      }
+    }
+
     if (theme === "dark") {
       document.documentElement.setAttribute("data-theme", "dark");
     } else if (theme === "light") {
       document.documentElement.removeAttribute("data-theme");
-    } else if (theme === "system" || !theme) {
+    } else if (theme === "system") {
       if (typeof window !== "undefined") {
         const mql = window.matchMedia("(prefers-color-scheme: dark)");
         const applyTheme = (matches: boolean) => {
@@ -185,9 +200,29 @@ export function MurattabApp() {
         return () => mql.removeEventListener("change", listener);
       }
     }
-  }, [data?.settings.theme]);
+  }, [theme]);
 
   const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
+
+  if (pathname === "/offline") {
+    return <>{children}</>;
+  }
+
+  const contextValue: MurattabContextValue | null = data
+    ? {
+        data,
+        refresh,
+        openCourse: (course) => {
+          setCourseToEdit(course ?? null);
+          setModal("course");
+        },
+        openRestore: () => setModal("restore"),
+        openImport: () => setModal("import"),
+        openManage: () => setModal("manage"),
+        startTour,
+        notify: setNotice
+      }
+    : null;
 
   const content = !data ? (
     <div className="empty">{loadError ? `تعذر فتح التخزين المحلي: ${loadError}` : "جارٍ تجهيز بياناتك المحلية…"}</div>
@@ -215,20 +250,22 @@ export function MurattabApp() {
       }}
     />
   ) : (
-    <Dashboard
-      data={data}
-      pathname={pathname}
-      openCourse={() => {
-        setCourseToEdit(null);
-        setModal("course");
-      }}
-      openRestore={() => setModal("restore")}
-      openImport={() => setModal("import")}
-      openManage={() => setModal("manage")}
-      startTour={startTour}
-      refresh={refresh}
-      notify={setNotice}
-    />
+    children ?? (
+      <Dashboard
+        data={data}
+        pathname={pathname}
+        openCourse={() => {
+          setCourseToEdit(null);
+          setModal("course");
+        }}
+        openRestore={() => setModal("restore")}
+        openImport={() => setModal("import")}
+        openManage={() => setModal("manage")}
+        startTour={startTour}
+        refresh={refresh}
+        notify={setNotice}
+      />
+    )
   );
 
   return (
@@ -252,7 +289,13 @@ export function MurattabApp() {
             ))}
           </nav>
         </header>
-        {content}
+        {contextValue ? (
+          <MurattabProvider value={contextValue}>
+            {content}
+          </MurattabProvider>
+        ) : (
+          content
+        )}
       </main>
 
       <nav className="bottom-nav" aria-label="التنقل الرئيسي للهاتف">
