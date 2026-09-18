@@ -4,6 +4,7 @@ import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction
 import { ScheduleExtractionResultSchema, type ScheduleExtractor } from "@/domain/models";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // Allows overriding extractor during integration tests if needed
 let defaultExtractor: ScheduleExtractor | null = null;
