@@ -448,3 +448,79 @@ test("Phase 4.2: Schedule يعرض ذكاء اليوم (المحاضرة الح�
   await expect(sundayTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".today-btn")).toHaveCount(0);
 });
+
+test("Phase 4.2.1: Bottom navigation مستقر تمامًا والمظهر يعرض تلقائي مع حالة الجهاز", async ({ page, isMobile }) => {
+  await page.addInitScript(() => {
+    const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+    const snapshot = {
+      profile: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "ليان",
+        universityId: "ttu",
+        facultyId: "198b8f50-8932-5eea-b267-0b48dfde70fd",
+        majorId: "4d3811d3-7773-5c46-bdb4-373f2deb7222",
+        createdAt: new Date().toISOString()
+      },
+      settings: { id: "settings", theme: "light", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      courses: [],
+      sessions: []
+    };
+    localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+  });
+
+  await page.goto("/");
+
+  if (isMobile) {
+    const bottomNav = page.locator(".bottom-nav");
+    await expect(bottomNav).toBeVisible();
+
+    // 1. Verify bottom-nav has NO animation applied
+    const animName = await bottomNav.evaluate((el) => window.getComputedStyle(el).animationName);
+    expect(animName).toBe("none");
+
+    // 2. Mobile navigation sequence: Home -> Schedule -> Calendar -> Settings -> Home
+    const scheduleLink = bottomNav.getByRole("link", { name: "جدولي" });
+    const calendarLink = bottomNav.getByRole("link", { name: "التقويم" });
+    const settingsLink = bottomNav.getByRole("link", { name: "الإعدادات" });
+    const homeLink = bottomNav.getByRole("link", { name: "الرئيسية" });
+
+    // Home -> Schedule
+    await scheduleLink.click();
+    await expect(scheduleLink).toHaveAttribute("aria-current", "page");
+    await expect(homeLink).not.toHaveAttribute("aria-current", "page");
+
+    // Schedule -> Calendar
+    await calendarLink.click();
+    await expect(calendarLink).toHaveAttribute("aria-current", "page");
+    await expect(scheduleLink).not.toHaveAttribute("aria-current", "page");
+
+    // Calendar -> Settings
+    await settingsLink.click();
+    await expect(settingsLink).toHaveAttribute("aria-current", "page");
+    await expect(calendarLink).not.toHaveAttribute("aria-current", "page");
+
+    // Settings -> Home
+    await homeLink.click();
+    await expect(homeLink).toHaveAttribute("aria-current", "page");
+    await expect(settingsLink).not.toHaveAttribute("aria-current", "page");
+
+    // Verify tap-highlight-color is transparent on mobile navigation
+    const tapHighlight = await scheduleLink.evaluate((el) => {
+      const cs = window.getComputedStyle(el);
+      return cs.getPropertyValue("-webkit-tap-highlight-color") || cs.webkitTapHighlightColor || "";
+    });
+    expect(["transparent", "rgba(0, 0, 0, 0)", ""].includes(tapHighlight)).toBe(true);
+  }
+
+  // Navigate to Settings to verify theme copy and behavior
+  await page.goto("/settings");
+  const autoBtn = page.getByRole("button", { name: "تلقائي" });
+  await expect(autoBtn).toBeVisible();
+  await expect(autoBtn).toHaveAttribute("aria-label", "تلقائي — حسب إعداد جهازك");
+
+  // Click auto/system
+  await autoBtn.click();
+  await expect(page.getByText(/تلقائي — حسب إعداد جهازك/)).toBeVisible();
+});
+

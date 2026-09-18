@@ -237,11 +237,16 @@ p { line-height: 1.65; }
   align-items: center;
   font-size: 0.92rem;
   font-weight: 500;
-  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  -webkit-tap-highlight-color: transparent;
 }
 .nav a:hover { color: var(--foreground); }
+.nav a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .nav a[aria-current="page"] {
-  background: var(--surface);
+  background-color: var(--surface);
   color: var(--foreground);
   box-shadow: var(--shadow-sm);
   font-weight: 600;
@@ -1243,11 +1248,6 @@ p { line-height: 1.65; }
   backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
   box-shadow: 0 12px 32px rgba(55, 35, 28, 0.14);
-  animation: navIn var(--motion-med) var(--motion-ease) both;
-}
-@keyframes navIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 [data-theme="dark"] .bottom-nav { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
 
@@ -1264,12 +1264,17 @@ p { line-height: 1.65; }
   color: var(--foreground-muted);
   border-radius: var(--radius-pill);
   font-weight: 500;
-  transition: color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
+  transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+  -webkit-tap-highlight-color: transparent;
 }
 .bottom-nav a:hover { color: var(--foreground); }
+.bottom-nav a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .bottom-nav a[aria-current="page"] {
   color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
   font-weight: 700;
 }
 .bottom-nav a svg { width: 18px; height: 18px; stroke-width: 1.8; }

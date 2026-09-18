@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { AppSettings } from "@/domain/models";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
@@ -9,6 +9,22 @@ import { ttuConfig } from "@/config/ttu";
 import { LocalScheduleRepository } from "@/storage/local-repository";
 
 const repo = new LocalScheduleRepository();
+
+function subscribeSystemTheme(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+
+function getSystemThemeSnapshot() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function getSystemThemeServerSnapshot() {
+  return false;
+}
 
 export function SettingsView({
   data,
@@ -64,6 +80,12 @@ export function SettingsView({
     void update({ theme: value });
   };
 
+  const systemIsDark = useSyncExternalStore(
+    subscribeSystemTheme,
+    getSystemThemeSnapshot,
+    getSystemThemeServerSnapshot
+  );
+
   return (
     <section className="settings-shell">
       <p className="eyebrow">الإعدادات</p>
@@ -89,7 +111,11 @@ export function SettingsView({
         <div className="setting" style={{ display: "block" }}>
           <div style={{ marginBottom: 10 }}>
             <h2>الوضع</h2>
-            <p className="muted">فاتح، داكن، أو تلقائي حسب جهازك.</p>
+            <p className="muted">
+              {data.settings.theme === "system"
+                ? `تلقائي — حسب إعداد جهازك · ${systemIsDark ? "داكن الآن" : "فاتح الآن"}`
+                : "فاتح، داكن، أو تلقائي — حسب إعداد جهازك."}
+            </p>
           </div>
           <div className="segmented" role="group" aria-label="اختر وضع المظهر">
             <button
@@ -116,6 +142,8 @@ export function SettingsView({
             <button
               type="button"
               aria-pressed={data.settings.theme === "system"}
+              aria-label="تلقائي — حسب إعداد جهازك"
+              title="تلقائي — حسب إعداد جهازك"
               onClick={() => setTheme("system")}
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
