@@ -812,6 +812,55 @@ test.describe("Phase 4.2.2: Hard-Reload Existing User Theme Fallback (without mu
     await page.goto("/");
     expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
   });
+
+  test("E: Brand-new origin with stalled IndexedDB resolves to Onboarding within bounded timeout", async ({ page }) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem("murattab-splash", "1");
+      localStorage.clear();
+      // Simulate iOS WebKit stalled IndexedDB where indexedDB.open never settles
+      window.indexedDB.open = function () {
+        const dummyReq = new EventTarget() as unknown as IDBOpenDBRequest;
+        return dummyReq;
+      };
+    });
+
+    await page.goto("/");
+
+    // Verify it doesn't stay on loading forever, but transitions to Onboarding within bounded timeout (~2.5s)
+    const onboardingHeading = page.getByRole("heading", { name: "لنرتّب فصلك الدراسي" });
+    await expect(onboardingHeading).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText("جارٍ تجهيز بياناتك المحلية…")).not.toBeVisible();
+  });
+
+  test("F: Fresh origin in plain HTTP / insecure context (crypto.randomUUID undefined) completes Onboarding and opens Home", async ({ page }) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem("murattab-splash", "1");
+      localStorage.clear();
+      // Simulate plain HTTP LAN origin where crypto.randomUUID is not available in insecure contexts
+      if (window.crypto) {
+        // @ts-expect-error simulating plain HTTP origin
+        delete window.crypto.randomUUID;
+      }
+    });
+
+    await page.goto("/");
+
+    // Onboarding should render
+    const onboardingHeading = page.getByRole("heading", { name: "لنرتّب فصلك الدراسي" });
+    await expect(onboardingHeading).toBeVisible({ timeout: 8000 });
+
+    // Fill onboarding form
+    await page.getByLabel("الاسم").fill("طالب تجريبي");
+    await page.getByRole("combobox", { name: "الكلية", exact: true }).selectOption({ label: "كلية تكنولوجيا المعلومات والاتصالات" });
+    await page.getByRole("combobox", { name: "التخصص", exact: true }).selectOption({ label: "علم الحاسوب /الذكاء الاصطناعي وعلم البيانات" });
+
+    // Submit form
+    await page.getByRole("button", { name: "ابدأ مع مرتب" }).click();
+
+    // Verify Onboarding completes and main app shell / guided tour on Home opens
+    await expect(page.getByRole("dialog", { name: "محاضرتك القادمة" })).toBeVisible({ timeout: 8000 });
+  });
 });
+
 
 

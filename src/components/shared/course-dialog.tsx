@@ -13,6 +13,7 @@ import {
   orderedDays
 } from "@/domain/schedule";
 import { LocalScheduleRepository } from "@/storage/local-repository";
+import { generateId } from "@/lib/uuid";
 
 type CourseForm = {
   name: string;
@@ -69,7 +70,7 @@ export function CourseDialog({
   });
 
   const onSubmit = async (values: CourseForm) => {
-    const courseId = courseToEdit?.id ?? crypto.randomUUID();
+    const courseId = courseToEdit?.id ?? generateId();
     const termId = data.settings.activeTermId ?? data.terms[0]?.id;
     if (!termId) return;
 

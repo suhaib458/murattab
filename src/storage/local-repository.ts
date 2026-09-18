@@ -66,6 +66,9 @@ export class LocalScheduleRepository implements ScheduleRepository {
   private sessions = db.table<ClassSession, string>("sessions");
   private key = "murattab-fallback-v1";
   private memoryFallback: AppSnapshot = { profile: null, settings: initialSettings, terms: [], courses: [], sessions: [] };
+  private snapshotCounter = 0;
+
+  constructor(private readonly timeoutMs = 2500) {}
 
   private fallback(): AppSnapshot {
     if (typeof localStorage === "undefined") {
@@ -104,7 +107,7 @@ export class LocalScheduleRepository implements ScheduleRepository {
     }
   }
 
-  private async dexieSnapshot(): Promise<AppSnapshot> {
+  protected async dexieSnapshot(): Promise<AppSnapshot> {
     const rawSettings = await this.settings.get("settings");
     const parsedSettings = rawSettings ? (AppSettingsSchema.safeParse(rawSettings).data ?? initialSettings) : initialSettings;
     const profiles = await this.profiles.toArray();
@@ -145,25 +148,58 @@ export class LocalScheduleRepository implements ScheduleRepository {
       return this.fallback();
     }
 
+    const currentAttempt = ++this.snapshotCounter;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const timeoutPromise = new Promise<AppSnapshot>((resolve) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        console.warn("IndexedDB initialization timed out; using local fallback");
+        resolve(this.fallback());
+      }, this.timeoutMs);
+    });
+
+    const dexiePromise = (async (): Promise<AppSnapshot> => {
+      try {
+        const dexieData = await this.dexieSnapshot();
+
+        // Late Dexie Completion Guard:
+        // If this attempt already timed out, or a newer snapshot was triggered,
+        // we MUST NOT touch fallback or sync to Dexie, avoiding race conditions.
+        if (timedOut || currentAttempt !== this.snapshotCounter) {
+          console.warn("Dexie snapshot resolved after timeout or newer attempt; discarding stale result");
+          return this.fallback();
+        }
+
+        const fbData = this.fallback();
+
+        // If Dexie has no data yet but fallback has profile or courses, return fallback immediately
+        // without blocking snapshot initialization on an eager Dexie restore
+        if (!dexieData.profile && dexieData.courses.length === 0 && (fbData.profile || fbData.courses.length > 0)) {
+          return fbData;
+        }
+
+        // Sync latest to fallback to maintain persistence guarantee
+        if (dexieData.profile || dexieData.courses.length > 0) {
+          this.saveFallback(dexieData);
+        }
+
+        return dexieData;
+      } catch (error) {
+        if (!timedOut) {
+          console.warn("IndexedDB read failed, falling back to localStorage:", error);
+        }
+        return this.fallback();
+      }
+    })();
+
     try {
-      const dexieData = await this.dexieSnapshot();
-      const fbData = this.fallback();
-
-      // If Dexie has no data yet but fallback has profile or courses, restore into Dexie
-      if (!dexieData.profile && dexieData.courses.length === 0 && (fbData.profile || fbData.courses.length > 0)) {
-        await this.syncToDexie(fbData);
-        return fbData;
+      return await Promise.race([dexiePromise, timeoutPromise]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
       }
-
-      // Sync latest to fallback to maintain persistence guarantee
-      if (dexieData.profile || dexieData.courses.length > 0) {
-        this.saveFallback(dexieData);
-      }
-
-      return dexieData;
-    } catch (error) {
-      console.warn("IndexedDB read failed, falling back to localStorage:", error);
-      return this.fallback();
     }
   }
 

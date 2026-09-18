@@ -97,7 +97,9 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   useEffect(() => {
     void repo
       .snapshot()
-      .then((snapshot) => setData(snapshot))
+      .then((snapshot) => {
+        setData(snapshot);
+      })
       .catch((error: unknown) => {
         console.error("Murattab storage error", error);
         setLoadError(error instanceof Error ? error.message : "تعذر فتح التخزين المحلي");
