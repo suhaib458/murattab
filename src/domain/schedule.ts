@@ -336,4 +336,80 @@ export function getFreeTimeIntelligence(todaySessions: ClassSession[], nowTime: 
   return { status: "none" };
 }
 
+/**
+ * Determine which day tab to auto-select when the Schedule page opens.
+ *
+ * Rules:
+ * 1. If today is a teaching day (Sat–Thu) and has sessions → select today.
+ * 2. If today is a teaching day with no sessions, or today is Friday →
+ *    search forward through the weekly cycle for the nearest teaching day
+ *    that has at least one session.
+ * 3. If the entire schedule is empty → fallback to Saturday ("س"), the first
+ *    item in orderedDays.
+ */
+export function getInitialScheduleDay(
+  allSessions: ClassSession[],
+  currentJsDay: number
+): DayCode {
+  // Saturday through Thursday: ALWAYS select today's teaching day initially
+  if (currentJsDay !== 5) {
+    const todayCode = getDayCodeFromJsDay(currentJsDay);
+    if (todayCode) {
+      return todayCode;
+    }
+  }
 
+  // Friday only: search forward for nearest teaching day that actually has sessions
+  const daysWithSessions = new Set(allSessions.map((s) => s.day));
+  for (let offset = 1; offset <= 6; offset++) {
+    const nextJsDay = (5 + offset) % 7;
+    if (nextJsDay === 5) continue;
+    const nextCode = getDayCodeFromJsDay(nextJsDay);
+    if (nextCode && daysWithSessions.has(nextCode)) {
+      return nextCode;
+    }
+  }
+
+  // Friday + completely empty schedule → fallback to Saturday
+  return "س";
+}
+
+export interface DayConflictAnalysis {
+  /** Set of session IDs that are involved in at least one conflict. */
+  conflictingSessionIds: Set<string>;
+  /** Number of unique conflict pairs (A↔B counted once, not twice). */
+  conflictPairCount: number;
+}
+
+/**
+ * Analyze conflicts within a single day's session list.
+ *
+ * Uses `findConflicts(sessions, sessions)` internally but deduplicates the
+ * directional pairs: if A overlaps B, findConflicts returns both A→B and B→A,
+ * but this helper normalizes them into a single unique pair by sorting IDs.
+ */
+export function analyzeDayConflicts(sessions: ClassSession[]): DayConflictAnalysis {
+  if (sessions.length < 2) {
+    return { conflictingSessionIds: new Set(), conflictPairCount: 0 };
+  }
+
+  const rawConflicts = findConflicts(sessions, sessions);
+  const seenPairs = new Set<string>();
+  const conflictingSessionIds = new Set<string>();
+
+  for (const conflict of rawConflicts) {
+    // Normalize pair key so A↔B and B↔A produce the same key
+    const pairKey =
+      conflict.candidate.id < conflict.other.id
+        ? `${conflict.candidate.id}|${conflict.other.id}`
+        : `${conflict.other.id}|${conflict.candidate.id}`;
+
+    if (!seenPairs.has(pairKey)) {
+      seenPairs.add(pairKey);
+      conflictingSessionIds.add(conflict.candidate.id);
+      conflictingSessionIds.add(conflict.other.id);
+    }
+  }
+
+  return { conflictingSessionIds, conflictPairCount: seenPairs.size };
+}

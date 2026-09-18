@@ -19,7 +19,9 @@ import {
   getMinutesRemainingInSession,
   getMinutesUntilSession,
   getNextScheduledSession,
-  getFreeTimeIntelligence
+  getFreeTimeIntelligence,
+  getInitialScheduleDay,
+  analyzeDayConflicts
 } from "@/domain/schedule";
 import { AcademicTermSchema, ClassSessionSchema } from "@/domain/models";
 import { getFirstOccurrenceDate } from "@/domain/calendar";
@@ -296,6 +298,21 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         expect(getCurrentSession(sessions, "13:00")).toBeNull();
         expect(getUpcomingSession(sessions, "13:00")).toBeNull();
       });
+
+      it("حجب علامة المحاضرة القادمة عندما تكون هناك محاضرة جارية حاليًا", () => {
+        // الساعة 09:30: lecture1 جارية (09:00 - 10:00)
+        const current = getCurrentSession(sessions, "09:30");
+        expect(current?.id).toBe("lec1");
+        // عندما توجد محاضرة جارية، يجب حجب المحاضرة القادمة
+        const upcoming = !current ? getUpcomingSession(sessions, "09:30") : null;
+        expect(upcoming).toBeNull();
+
+        // الساعة 10:15: لا توجد محاضرة جارية -> تظهر lecture2 كقادمة
+        const currentAt1015 = getCurrentSession(sessions, "10:15");
+        expect(currentAt1015).toBeNull();
+        const upcomingAt1015 = !currentAt1015 ? getUpcomingSession(sessions, "10:15") : null;
+        expect(upcomingAt1015?.id).toBe("lec2");
+      });
     });
 
     describe("البحث عن الجلسة الدراسية القادمة عبر الأيام (getNextScheduledSession)", () => {
@@ -402,6 +419,126 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       });
     });
   });
-});
 
+  // =========================================================================
+  // Phase 4.2: getInitialScheduleDay
+  // =========================================================================
+  describe("اختيار اليوم الافتراضي عند فتح الجدول (getInitialScheduleDay)", () => {
+    const sundaySession = { ...baseSession, id: "sun1", day: "ح" as const };
+    const mondaySession = { ...baseSession, id: "mon1", day: "ن" as const };
+    const saturdaySession = { ...baseSession, id: "sat1", day: "س" as const };
+    const tuesdaySession = { ...baseSession, id: "tue1", day: "ث" as const };
+
+    it("يختار اليوم الحالي دائمًا من السبت إلى الخميس حتى لو لم تكن فيه محاضرات", () => {
+      // الأحد (jsDay=0) مع وجود محاضرات
+      expect(getInitialScheduleDay([sundaySession], 0)).toBe("ح");
+      // الاثنين (jsDay=1) مع وجود محاضرات
+      expect(getInitialScheduleDay([mondaySession], 1)).toBe("ن");
+      // السبت (jsDay=6) مع وجود محاضرات
+      expect(getInitialScheduleDay([saturdaySession], 6)).toBe("س");
+
+      // الأحد (jsDay=0) بدون محاضرات ولكن الاثنين فيه محاضرات => يختار الأحد
+      expect(getInitialScheduleDay([mondaySession], 0)).toBe("ح");
+      // الأربعاء (jsDay=3) بدون محاضرات ولكن الأحد فيه محاضرات => يختار الأربعاء
+      expect(getInitialScheduleDay([sundaySession], 3)).toBe("ر");
+      // السبت (jsDay=6) بدون محاضرات ولكن الثلاثاء فيه محاضرات => يختار السبت
+      expect(getInitialScheduleDay([tuesdaySession], 6)).toBe("س");
+
+      // جدول فارغ تمامًا في يوم تدريس عادي => يختار ذلك اليوم
+      expect(getInitialScheduleDay([], 0)).toBe("ح"); // الأحد
+      expect(getInitialScheduleDay([], 3)).toBe("ر"); // الأربعاء
+      expect(getInitialScheduleDay([], 6)).toBe("س"); // السبت
+    });
+
+    it("يوم الجمعة فقط: يبحث للأمام حتى يجد أقرب يوم تدريس فيه محاضرات", () => {
+      // الجمعة (jsDay=5)، السبت فيه محاضرات => السبت
+      expect(getInitialScheduleDay([saturdaySession], 5)).toBe("س");
+      // الجمعة (jsDay=5)، السبت فارغ والأحد فيه محاضرات => الأحد
+      expect(getInitialScheduleDay([sundaySession], 5)).toBe("ح");
+      // الجمعة (jsDay=5)، فقط الثلاثاء فيه محاضرات => الثلاثاء
+      expect(getInitialScheduleDay([tuesdaySession], 5)).toBe("ث");
+    });
+
+    it("يوم الجمعة مع جدول فارغ تمامًا يعود إلى السبت", () => {
+      expect(getInitialScheduleDay([], 5)).toBe("س");
+    });
+
+    it("يتعامل مع عدة أيام فيها محاضرات بشكل صحيح", () => {
+      const allSessions = [sundaySession, mondaySession, tuesdaySession];
+      // في يوم الأحد => يختار الأحد
+      expect(getInitialScheduleDay(allSessions, 0)).toBe("ح");
+      // في يوم الجمعة => يبحث للأمام: السبت(لا يوجد)، الأحد(يوجد) => يختار الأحد
+      expect(getInitialScheduleDay(allSessions, 5)).toBe("ح");
+      // في يوم الأربعاء (يوم تدريس) => يختار الأربعاء دائمًا
+      expect(getInitialScheduleDay(allSessions, 3)).toBe("ر");
+    });
+  });
+
+  // =========================================================================
+  // Phase 4.2: analyzeDayConflicts
+  // =========================================================================
+  describe("تحليل تعارضات اليوم (analyzeDayConflicts)", () => {
+    it("لا يكتشف تعارض في محاضرات متتالية (back-to-back)", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:00" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(0);
+      expect(result.conflictingSessionIds.size).toBe(0);
+    });
+
+    it("يكتشف تعارض واحد بين محاضرتين متداخلتين ولا يعدّه مرتين", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:30" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(1);
+      expect(result.conflictingSessionIds.size).toBe(2);
+      expect(result.conflictingSessionIds.has("s1")).toBe(true);
+      expect(result.conflictingSessionIds.has("s2")).toBe(true);
+    });
+
+    it("يتعامل مع عدة تعارضات متعددة بشكل صحيح", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:30" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" },
+        { ...baseSession, id: "s3", startsAt: "12:00", endsAt: "13:30" },
+        { ...baseSession, id: "s4", startsAt: "13:00", endsAt: "14:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(2);
+      expect(result.conflictingSessionIds.size).toBe(4);
+    });
+
+    it("يتعامل مع ثلاث محاضرات متداخلة في نفس الفترة", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "10:00" },
+        { ...baseSession, id: "s2", startsAt: "08:30", endsAt: "09:30" },
+        { ...baseSession, id: "s3", startsAt: "09:00", endsAt: "10:30" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      // s1↔s2, s1↔s3, s2↔s3 = 3 unique pairs
+      expect(result.conflictPairCount).toBe(3);
+      expect(result.conflictingSessionIds.size).toBe(3);
+    });
+
+    it("يعيد صفر عندما لا توجد محاضرات أو محاضرة واحدة فقط", () => {
+      expect(analyzeDayConflicts([]).conflictPairCount).toBe(0);
+      expect(analyzeDayConflicts([baseSession]).conflictPairCount).toBe(0);
+    });
+
+    it("لا يعتبر المحاضرات غير المتداخلة تعارضات", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:00" },
+        { ...baseSession, id: "s2", startsAt: "10:00", endsAt: "11:00" },
+        { ...baseSession, id: "s3", startsAt: "12:00", endsAt: "13:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(0);
+      expect(result.conflictingSessionIds.size).toBe(0);
+    });
+  });
+});
 

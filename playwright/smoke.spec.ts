@@ -367,6 +367,84 @@ test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحال�
   await expect(freeTime.getByText("ساعة و30 دقيقة")).toBeVisible();
 });
 
+test("Phase 4.2: Schedule يعرض ذكاء اليوم (المحاضرة الحالية، الملخص، الفراغ، والتعارض)", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-04T09:30:00")); // 2026-10-04 is Sunday (ح)
+  await page.addInitScript(() => {
+    const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+    const courseId1 = "11111111-1111-4111-8111-111111111111";
+    const courseId2 = "22222222-2222-4222-8222-222222222222";
+    const courseId3 = "33333333-3333-4333-8333-333333333333";
+    const snapshot = {
+      profile: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "ليان",
+        universityId: "ttu",
+        facultyId: "198b8f50-8932-5eea-b267-0b48dfde70fd",
+        majorId: "4d3811d3-7773-5c46-bdb4-373f2deb7222",
+        createdAt: new Date().toISOString()
+      },
+      settings: { id: "settings", theme: "light", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      courses: [
+        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
+        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
+        { id: courseId3, termId, name: "قواعد البيانات", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } }
+      ],
+      sessions: [
+        { id: "s1", courseId: courseId1, day: "ح", startsAt: "09:00", endsAt: "10:00", room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false }, kind: "lecture" },
+        { id: "s2", courseId: courseId2, day: "ح", startsAt: "11:30", endsAt: "13:00", room: { raw: "105 هـ", label: "كلية الهندسة – قاعة 105", isOnline: false }, kind: "lecture" },
+        // Conflicting with s2 (overlaps 12:00-13:30 with 11:30-13:00)
+        { id: "s3", courseId: courseId3, day: "ح", startsAt: "12:00", endsAt: "13:30", room: { raw: "301 هـ", label: "كلية الهندسة – قاعة 301", isOnline: false }, kind: "lab" },
+        // Monday session for day-switching test
+        { id: "s4", courseId: courseId1, day: "ن", startsAt: "08:00", endsAt: "09:00", room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false }, kind: "lecture" }
+      ]
+    };
+    localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+  });
 
+  // Navigate to Schedule
+  await page.goto("/schedule");
 
+  // 1. Day selector defaults to today (Sunday / ح)
+  const sundayTab = page.getByRole("tab", { name: /الأحد/ });
+  await expect(sundayTab).toHaveAttribute("aria-selected", "true");
 
+  // 2. Day summary is visible
+  const summary = page.locator(".schedule-day-summary");
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText("3 محاضرات")).toBeVisible();
+
+  // 3. Current session has "الآن" badge (and no "القادمة" badge shown simultaneously)
+  const currentBadge = page.locator(".session-status-badge.current");
+  await expect(currentBadge).toBeVisible();
+  await expect(currentBadge).toHaveText("الآن");
+  await expect(page.locator(".session-status-badge.upcoming")).toHaveCount(0);
+
+  // 4. Time gap between sessions is displayed
+  const timeGap = page.locator(".time-gap").first();
+  await expect(timeGap).toBeVisible();
+
+  // 5. Conflict banner appears (s2 and s3 overlap)
+  const conflictBanner = page.locator(".conflict-banner");
+  await expect(conflictBanner).toBeVisible();
+  await expect(conflictBanner).toContainText("تعارض");
+
+  // 6. Conflict badge on affected session cards
+  const conflictBadges = page.locator(".session-status-badge.conflict");
+  await expect(conflictBadges).toHaveCount(2);
+
+  // 7. "Go to Today" button is NOT visible (we're already on today)
+  await expect(page.locator(".today-btn")).toHaveCount(0);
+
+  // 8. Switch to Monday → "Go to Today" appears
+  const mondayTab = page.getByRole("tab", { name: /الاثنين/ });
+  await mondayTab.click();
+  await expect(mondayTab).toHaveAttribute("aria-selected", "true");
+  const todayBtn = page.locator(".today-btn");
+  await expect(todayBtn).toBeVisible();
+
+  // 9. Click "Go to Today" → returns to Sunday
+  await todayBtn.click();
+  await expect(sundayTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".today-btn")).toHaveCount(0);
+});

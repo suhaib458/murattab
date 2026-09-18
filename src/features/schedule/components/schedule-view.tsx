@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import type { DayCode } from "@/domain/models";
 import {
   dayNames,
-  orderedDays,
+  getDayCodeFromJsDay,
+  getInitialScheduleDay,
   sortSessions
 } from "@/domain/schedule";
-import { SessionList } from "@/components/shared/session-list";
+import { ScheduleDaySelector } from "./schedule-day-selector";
+import { ScheduleSessionList } from "./schedule-session-list";
 
 export function ScheduleView({
   data,
@@ -19,7 +21,23 @@ export function ScheduleView({
   openCourse: () => void;
   openImport: () => void;
 }) {
-  const [day, setDay] = useState<DayCode>("ح");
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const todayJsDay = now.getDay();
+  const todayCode = getDayCodeFromJsDay(todayJsDay);
+  const nowTime = now.toTimeString().slice(0, 5);
+
+  const [day, setDay] = useState<DayCode>(() =>
+    getInitialScheduleDay(data.sessions, todayJsDay)
+  );
+
   const sessions = sortSessions(data.sessions.filter((item) => item.day === day));
 
   return (
@@ -39,25 +57,19 @@ export function ScheduleView({
         </div>
       </div>
 
-      <div className="tabs" role="tablist" aria-label="أيام الأسبوع">
-        {orderedDays.map((code) => {
-          const count = data.sessions.filter((s) => s.day === code).length;
-          return (
-            <button
-              role="tab"
-              aria-selected={day === code}
-              key={code}
-              onClick={() => setDay(code)}
-            >
-              {dayNames[code]} {count > 0 && `(${count})`}
-            </button>
-          );
-        })}
-      </div>
+      <ScheduleDaySelector
+        day={day}
+        setDay={setDay}
+        sessions={data.sessions}
+        todayCode={todayCode}
+      />
 
-      <SessionList
+      <ScheduleSessionList
         sessions={sessions}
         courses={data.courses}
+        day={day}
+        todayCode={todayCode}
+        nowTime={nowTime}
         empty={`لا توجد جلسات يوم ${dayNames[day]}.`}
       />
 
