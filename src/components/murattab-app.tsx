@@ -105,8 +105,48 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
         setLoadError(error instanceof Error ? error.message : "تعذر فتح التخزين المحلي");
       });
 
+    let unmountCleanup: (() => void) | undefined;
+
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js");
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let refreshing = false;
+
+      const handleControllerChange = () => {
+        if (!hadController) return;
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      };
+
+      navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+
+      navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => {
+          void registration.update().catch((err: unknown) => {
+            console.warn("[Murattab SW] Update check failed:", err);
+          });
+        })
+        .catch((err: unknown) => {
+          console.warn("[Murattab SW] Registration failed:", err);
+        });
+
+      const handleVisibility = () => {
+        if (document.visibilityState === "visible") {
+          navigator.serviceWorker
+            .getRegistration()
+            .then((reg) => {
+              void reg?.update().catch(() => {});
+            })
+            .catch(() => {});
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+
+      unmountCleanup = () => {
+        navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
     } else if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       void navigator.serviceWorker.getRegistrations().then((registrations) => {
         for (const reg of registrations) {
@@ -137,6 +177,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
     }
 
     return () => {
+      unmountCleanup?.();
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
     };
