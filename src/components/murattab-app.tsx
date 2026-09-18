@@ -170,10 +170,19 @@ export function MurattabApp() {
     } else if (theme === "light") {
       document.documentElement.removeAttribute("data-theme");
     } else if (theme === "system" || !theme) {
-      if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.removeAttribute("data-theme");
+      if (typeof window !== "undefined") {
+        const mql = window.matchMedia("(prefers-color-scheme: dark)");
+        const applyTheme = (matches: boolean) => {
+          if (matches) {
+            document.documentElement.setAttribute("data-theme", "dark");
+          } else {
+            document.documentElement.removeAttribute("data-theme");
+          }
+        };
+        applyTheme(mql.matches);
+        const listener = (e: MediaQueryListEvent) => applyTheme(e.matches);
+        mql.addEventListener("change", listener);
+        return () => mql.removeEventListener("change", listener);
       }
     }
   }, [data?.settings.theme]);
