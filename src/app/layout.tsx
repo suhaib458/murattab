@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Alexandria } from "next/font/google";
 import "./globals.css";
 import "./splash.css";
+import { MurattabApp } from "@/components/murattab-app";
 
 const alexandria = Alexandria({
   subsets: ["arabic", "latin"],
@@ -24,10 +25,17 @@ export const viewport: Viewport = {
   viewportFit: "cover"
 };
 
+const themeScript = `(function(){try{var t=localStorage.getItem("murattab-theme");if(t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ar" dir="rtl" className={alexandria.variable} suppressHydrationWarning>
-      <body>{children}</body>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body>
+        <MurattabApp>{children}</MurattabApp>
+      </body>
     </html>
   );
 }

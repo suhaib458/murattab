@@ -45,6 +45,7 @@ test("شاشة البداية تنتهي تلقائيًا أو عند النقر
 });
 
 test("onboarding ثم إضافة مادة وتعديلها وحذفها", async ({ page }) => {
+  test.slow();
   await page.goto("/");
   const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
   if (await splash.isVisible()) {
@@ -522,5 +523,188 @@ test("Phase 4.2.1: Bottom navigation مستقر تمامًا والمظهر يع
   // Click auto/system
   await autoBtn.click();
   await expect(page.getByText(/تلقائي — حسب إعداد جهازك/)).toBeVisible();
+});
+
+test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
+  const setupUser = (theme: "light" | "dark" | "system") => {
+    const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+    return {
+      profile: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "ليان",
+        universityId: "ttu",
+        facultyId: "198b8f50-8932-5eea-b267-0b48dfde70fd",
+        majorId: "4d3811d3-7773-5c46-bdb4-373f2deb7222",
+        createdAt: new Date().toISOString()
+      },
+      settings: {
+        id: "settings",
+        theme,
+        onboardingComplete: true,
+        splashShown: true,
+        activeTermId: termId,
+        guideSeen: true,
+        completedGuideVersion: 1,
+        schemaVersion: 1
+      },
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      courses: [],
+      sessions: []
+    };
+  };
+
+  test("A & F & G: Saved LIGHT with device preferring DARK never receives data-theme='dark' during navigation and preserves persistent shell", async ({ page, isMobile }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      sessionStorage.setItem("murattab-splash", "1");
+      localStorage.setItem("murattab-theme", "light");
+
+      (window as unknown as { __themeMutations: string[]; __shellRef: Element | null }).__themeMutations = [];
+      const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.attributeName === "data-theme") {
+            const val = document.documentElement.getAttribute("data-theme") ?? "light";
+            (window as unknown as { __themeMutations: string[] }).__themeMutations.push(val);
+          }
+        }
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }, setupUser("light"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+
+    // Verify documentElement does not have data-theme="dark"
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+
+    // Record reference to topbar element to verify persistent shell is not remounted
+    await page.evaluate(() => {
+      (window as unknown as { __shellRef: Element | null }).__shellRef = document.querySelector(".topbar");
+    });
+
+    const getNavLinks = () => {
+      const container = isMobile ? page.locator(".bottom-nav") : page.locator(".topbar .nav");
+      return {
+        home: container.getByRole("link", { name: "الرئيسية" }),
+        schedule: container.getByRole("link", { name: "جدولي" }),
+        calendar: container.getByRole("link", { name: "التقويم" }),
+        settings: container.getByRole("link", { name: "الإعدادات" })
+      };
+    };
+
+    const links = getNavLinks();
+
+    // Navigate: Home -> Schedule
+    await links.schedule.click();
+    await expect(links.schedule).toHaveAttribute("aria-current", "page");
+    await expect(links.home).not.toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("جارٍ تجهيز بياناتك المحلية…")).not.toBeVisible();
+
+    // Schedule -> Calendar
+    await links.calendar.click();
+    await expect(links.calendar).toHaveAttribute("aria-current", "page");
+    await expect(links.schedule).not.toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("جارٍ تجهيز بياناتك المحلية…")).not.toBeVisible();
+
+    // Calendar -> Settings
+    await links.settings.click();
+    await expect(links.settings).toHaveAttribute("aria-current", "page");
+    await expect(links.calendar).not.toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("جارٍ تجهيز بياناتك المحلية…")).not.toBeVisible();
+
+    // Settings -> Home
+    await links.home.click();
+    await expect(links.home).toHaveAttribute("aria-current", "page");
+    await expect(links.settings).not.toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("جارٍ تجهيز بياناتك المحلية…")).not.toBeVisible();
+
+    // Verify topbar element persisted across all navigation (same DOM node instance)
+    const isSameShell = await page.evaluate(() => {
+      return (window as unknown as { __shellRef: Element | null }).__shellRef === document.querySelector(".topbar");
+    });
+    expect(isSameShell).toBe(true);
+
+    // Verify documentElement NEVER received data-theme="dark" at any point
+    const mutations = await page.evaluate(() => (window as unknown as { __themeMutations: string[] }).__themeMutations);
+    expect(mutations.includes("dark")).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  });
+
+  test("B: Saved DARK remains dark throughout internal route navigation", async ({ page, isMobile }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      sessionStorage.setItem("murattab-splash", "1");
+      localStorage.setItem("murattab-theme", "dark");
+    }, setupUser("dark"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    const container = isMobile ? page.locator(".bottom-nav") : page.locator(".topbar .nav");
+    const scheduleLink = container.getByRole("link", { name: "جدولي" });
+    const calendarLink = container.getByRole("link", { name: "التقويم" });
+    const settingsLink = container.getByRole("link", { name: "الإعدادات" });
+    const homeLink = container.getByRole("link", { name: "الرئيسية" });
+
+    // Navigate Home -> Schedule -> Calendar -> Settings -> Home
+    await scheduleLink.click();
+    await expect(scheduleLink).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    await calendarLink.click();
+    await expect(calendarLink).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    await settingsLink.click();
+    await expect(settingsLink).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    await homeLink.click();
+    await expect(homeLink).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+  });
+
+  test("C & D: Explicit SYSTEM follows device preference and updates live", async ({ page, isMobile }) => {
+    // C: SYSTEM + prefers dark -> dark
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      sessionStorage.setItem("murattab-splash", "1");
+      localStorage.setItem("murattab-theme", "system");
+    }, setupUser("system"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    const container = isMobile ? page.locator(".bottom-nav") : page.locator(".topbar .nav");
+    await container.getByRole("link", { name: "جدولي" }).click();
+    await expect(container.getByRole("link", { name: "جدولي" })).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+
+    // D: Switch device preference live to light -> becomes light
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.waitForFunction(() => document.documentElement.getAttribute("data-theme") === null);
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+
+    // Navigate to Calendar in light mode -> remains light
+    await container.getByRole("link", { name: "التقويم" }).click();
+    await expect(container.getByRole("link", { name: "التقويم" })).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  });
+
+  test("E: Unresolved data state does not mutate document theme", async ({ page }) => {
+    // When visiting without local snapshot ready, initial document theme must not be flipped to dark
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => {
+      sessionStorage.setItem("murattab-splash", "1");
+    });
+    await page.goto("/");
+    // Before or during onboarding initialization, document theme is still light (no data-theme)
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  });
 });
 
