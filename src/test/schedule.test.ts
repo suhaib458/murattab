@@ -11,7 +11,15 @@ import {
   orderedDays,
   getFloorLabel,
   calculateFreeTimeSlots,
-  formatDurationMinutes
+  formatDurationMinutes,
+  getDayCodeFromJsDay,
+  formatArabicDuration,
+  getCurrentSession,
+  getUpcomingSession,
+  getMinutesRemainingInSession,
+  getMinutesUntilSession,
+  getNextScheduledSession,
+  getFreeTimeIntelligence
 } from "@/domain/schedule";
 import { AcademicTermSchema, ClassSessionSchema } from "@/domain/models";
 import { getFirstOccurrenceDate } from "@/domain/calendar";
@@ -234,5 +242,166 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       expect(tuesdayFirstDate).toBe("20261006");
     });
   });
+
+  describe("ذكاء اليوم والجدول الزمني (Today Intelligence)", () => {
+    describe("تنسيق المدة باللغة العربية (formatArabicDuration)", () => {
+      it("ينسق الدقائق المفردة والجمع وفق القواعد المطلوبة بدقة", () => {
+        expect(formatArabicDuration(0)).toBe("أقل من دقيقة");
+        expect(formatArabicDuration(1)).toBe("دقيقة");
+        expect(formatArabicDuration(2)).toBe("دقيقتان");
+        expect(formatArabicDuration(8)).toBe("8 دقائق");
+        expect(formatArabicDuration(10)).toBe("10 دقائق");
+        expect(formatArabicDuration(45)).toBe("45 دقيقة");
+        expect(formatArabicDuration(60)).toBe("ساعة");
+        expect(formatArabicDuration(75)).toBe("ساعة و15 دقيقة");
+        expect(formatArabicDuration(120)).toBe("ساعتان");
+        expect(formatArabicDuration(150)).toBe("ساعتان و30 دقيقة");
+        expect(formatArabicDuration(180)).toBe("3 ساعات");
+        expect(formatArabicDuration(195)).toBe("3 ساعات و15 دقيقة");
+        expect(formatArabicDuration(660)).toBe("11 ساعة");
+      });
+    });
+
+    describe("تحديد المحاضرة الحالية والقادمة وشروط الحدود", () => {
+      const lecture1 = { ...baseSession, id: "lec1", startsAt: "09:00", endsAt: "10:00" };
+      const lecture2 = { ...baseSession, id: "lec2", startsAt: "11:00", endsAt: "12:30" };
+      const sessions = [lecture1, lecture2];
+
+      it("المحاضرة الحالية نشطة عندما startsAt <= now < endsAt", () => {
+        expect(getCurrentSession(sessions, "09:30")?.id).toBe("lec1");
+        expect(getMinutesRemainingInSession(lecture1, "09:30")).toBe(30);
+      });
+
+      it("شرط البداية: في لحظة البداية تمامًا (09:00) تعتبر المحاضرة نشطة وحالية", () => {
+        expect(getCurrentSession(sessions, "09:00")?.id).toBe("lec1");
+        expect(getMinutesRemainingInSession(lecture1, "09:00")).toBe(60);
+      });
+
+      it("شرط النهاية: في لحظة النهاية تمامًا (10:00) لا تعتبر المحاضرة حالية", () => {
+        expect(getCurrentSession(sessions, "10:00")).toBeNull();
+      });
+
+      it("تحديد المحاضرة القادمة لاحقًا اليوم وحساب الوقت المتبقي حتى بدئها", () => {
+        expect(getUpcomingSession(sessions, "08:15")?.id).toBe("lec1");
+        expect(getMinutesUntilSession(lecture1, "08:15")).toBe(45);
+
+        // بين المحاضرتين (10:15) القادمة هي lecture2
+        expect(getUpcomingSession(sessions, "10:15")?.id).toBe("lec2");
+        expect(getMinutesUntilSession(lecture2, "10:15")).toBe(45);
+      });
+
+      it("انتهاء جميع محاضرات اليوم عند تجاوز وقت نهاية آخر محاضرة", () => {
+        expect(getCurrentSession(sessions, "12:30")).toBeNull();
+        expect(getUpcomingSession(sessions, "12:30")).toBeNull();
+        expect(getCurrentSession(sessions, "13:00")).toBeNull();
+        expect(getUpcomingSession(sessions, "13:00")).toBeNull();
+      });
+    });
+
+    describe("البحث عن الجلسة الدراسية القادمة عبر الأيام (getNextScheduledSession)", () => {
+      const sundaySession = { ...baseSession, id: "sun1", day: "ح" as const, startsAt: "09:30", endsAt: "11:00" };
+      const tuesdaySession = { ...baseSession, id: "tue1", day: "ث" as const, startsAt: "10:00", endsAt: "11:00" };
+      const thursdaySession = { ...baseSession, id: "thu1", day: "خ" as const, startsAt: "08:30", endsAt: "10:00" };
+      const allSessions = [sundaySession, tuesdaySession, thursdaySession];
+
+      it("يعيد جلسة اليوم القادمة إذا كانت متبقية اليوم (daysAhead = 0)", () => {
+        // الأحد الساعة 08:00 صباحًا (jsDay: 0 = Sun)
+        const next = getNextScheduledSession(allSessions, 0, "08:00");
+        expect(next).not.toBeNull();
+        expect(next?.session.id).toBe("sun1");
+        expect(next?.dayCode).toBe("ح");
+        expect(next?.dayName).toBe("الأحد");
+        expect(next?.daysAhead).toBe(0);
+      });
+
+      it("يعيد جلسة اليوم التالي إذا انتهت محاضرات اليوم (الأحد بعد المحاضرة -> الثلاثاء)", () => {
+        // الأحد الساعة 12:00 ظهرًا (محاضرات الأحد انتهت)
+        const next = getNextScheduledSession(allSessions, 0, "12:00");
+        expect(next).not.toBeNull();
+        expect(next?.session.id).toBe("tue1");
+        expect(next?.dayCode).toBe("ث");
+        expect(next?.dayName).toBe("الثلاثاء");
+        expect(next?.daysAhead).toBe(2);
+      });
+
+      it("يتخطى يوم الجمعة كعطلة رسمية (الخميس بعد المحاضرة -> يتخطى الجمعة والسبت -> الأحد)", () => {
+        // الخميس الساعة 11:00 (jsDay: 4 = Thu) بعد انتهاء محاضرة الخميس
+        const next = getNextScheduledSession(allSessions, 4, "11:00");
+        expect(next).not.toBeNull();
+        expect(next?.session.id).toBe("sun1");
+        expect(next?.dayCode).toBe("ح");
+        expect(next?.dayName).toBe("الأحد");
+        expect(next?.daysAhead).toBe(3); // الجمعة (skip), السبت (no class), الأحد (sun1) -> 3 days ahead
+      });
+
+      it("يتعامل مع يوم الجمعة ويبحث عن أول جلسة في الأيام اللاحقة", () => {
+        // الجمعة (jsDay: 5)
+        const next = getNextScheduledSession(allSessions, 5, "10:00");
+        expect(next).not.toBeNull();
+        expect(next?.session.id).toBe("sun1");
+        expect(next?.dayCode).toBe("ح");
+        expect(next?.daysAhead).toBe(2); // السبت (no class), الأحد (sun1)
+      });
+
+      it("يلتف حول الأسبوع (Wrap-around) إذا لم تبق محاضرات حتى الأسبوع التالي", () => {
+        // جدول فيه محاضرة واحدة فقط يوم الثلاثاء
+        const singleSchedule = [tuesdaySession];
+        // نحن يوم الأربعاء (jsDay: 3)
+        const next = getNextScheduledSession(singleSchedule, 3, "08:00");
+        expect(next).not.toBeNull();
+        expect(next?.session.id).toBe("tue1");
+        expect(next?.dayCode).toBe("ث");
+        expect(next?.daysAhead).toBe(6); // خميس، جمعة، سبت، أحد، اثنين، ثلاثاء -> 6 days ahead
+      });
+
+      it("يعيد null إذا كان الجدول فارغًا تمامًا دون جلسات", () => {
+        expect(getNextScheduledSession([], 0, "08:00")).toBeNull();
+        expect(getNextScheduledSession([], 4, "15:00")).toBeNull();
+        expect(getNextScheduledSession([], 5, "12:00")).toBeNull();
+      });
+    });
+
+    describe("ذكاء فترات الفراغ (getFreeTimeIntelligence)", () => {
+      const s1 = { ...baseSession, id: "s1", startsAt: "08:30", endsAt: "10:00" };
+      const s2 = { ...baseSession, id: "s2", startsAt: "11:30", endsAt: "13:00" };
+      const s3 = { ...baseSession, id: "s3", startsAt: "14:00", endsAt: "15:00" };
+      const sessions = [s1, s2, s3];
+
+      it("يكتشف وجود الطالب حاليًا في فترة فراغ بين المحاضرات ويحسب الوقت المتبقي", () => {
+        // الساعة 10:40 (بين s1 التي تنتهي 10:00 و s2 التي تبدأ 11:30)
+        const info = getFreeTimeIntelligence(sessions, "10:40");
+        expect(info.status).toBe("current");
+        if (info.status === "current") {
+          expect(info.currentSlot.startsAt).toBe("10:00");
+          expect(info.currentSlot.endsAt).toBe("11:30");
+          expect(info.minutesRemaining).toBe(50); // 11:30 - 10:40 = 50 min
+        }
+      });
+
+      it("يكتشف فترة الفراغ القادمة لاحقًا أثناء حضور محاضرة", () => {
+        // الساعة 09:00 (خلال s1 08:30-10:00)
+        const info = getFreeTimeIntelligence(sessions, "09:00");
+        expect(info.status).toBe("upcoming");
+        if (info.status === "upcoming") {
+          expect(info.nextSlot.startsAt).toBe("10:00");
+          expect(info.nextSlot.endsAt).toBe("11:30");
+          expect(info.minutesUntil).toBe(60); // 10:00 - 09:00 = 60 min
+        }
+      });
+
+      it("يعيد status: none عندما لا توجد فترات فراغ متبقية اليوم أو عند عدم وجود استراحات", () => {
+        // الساعة 14:30 (خلال s3، ولا توجد فترات فراغ بعدها)
+        expect(getFreeTimeIntelligence(sessions, "14:30").status).toBe("none");
+
+        // محاضرات متتالية بدون فراغ
+        const backToBack = [
+          { ...baseSession, id: "b1", startsAt: "08:00", endsAt: "09:00" },
+          { ...baseSession, id: "b2", startsAt: "09:00", endsAt: "10:00" }
+        ];
+        expect(getFreeTimeIntelligence(backToBack, "08:30").status).toBe("none");
+      });
+    });
+  });
 });
+
 

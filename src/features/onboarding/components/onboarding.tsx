@@ -79,7 +79,7 @@ export function Onboarding({
             profile,
             {
               id: "settings",
-              theme: "system",
+              theme: "light",
               onboardingComplete: true,
               splashShown: true,
               activeTermId: term.id,
