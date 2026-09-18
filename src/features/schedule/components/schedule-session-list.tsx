@@ -35,7 +35,7 @@ export function ScheduleSessionList({
 
   // Current/upcoming detection (only for today)
   const currentSession = isToday ? getCurrentSession(sorted, nowTime) : null;
-  const upcomingSession = isToday ? getUpcomingSession(sorted, nowTime) : null;
+  const upcomingSession = isToday && !currentSession ? getUpcomingSession(sorted, nowTime) : null;
 
   // Conflict detection
   const conflicts = analyzeDayConflicts(sorted);

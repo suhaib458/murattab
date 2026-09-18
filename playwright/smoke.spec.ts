@@ -414,10 +414,11 @@ test("Phase 4.2: Schedule يعرض ذكاء اليوم (المحاضرة الح�
   await expect(summary).toBeVisible();
   await expect(summary.getByText("3 محاضرات")).toBeVisible();
 
-  // 3. Current session has "الآن" badge
+  // 3. Current session has "الآن" badge (and no "القادمة" badge shown simultaneously)
   const currentBadge = page.locator(".session-status-badge.current");
   await expect(currentBadge).toBeVisible();
   await expect(currentBadge).toHaveText("الآن");
+  await expect(page.locator(".session-status-badge.upcoming")).toHaveCount(0);
 
   // 4. Time gap between sessions is displayed
   const timeGap = page.locator(".time-gap").first();

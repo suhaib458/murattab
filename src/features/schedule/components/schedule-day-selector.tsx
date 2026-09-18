@@ -2,7 +2,7 @@
 
 import type { DayCode } from "@/domain/models";
 import type { ClassSession } from "@/domain/models";
-import { dayNames, orderedDays, getDayCodeFromJsDay } from "@/domain/schedule";
+import { dayNames, orderedDays } from "@/domain/schedule";
 
 export function ScheduleDaySelector({
   day,

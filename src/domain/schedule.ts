@@ -351,28 +351,26 @@ export function getInitialScheduleDay(
   allSessions: ClassSession[],
   currentJsDay: number
 ): DayCode {
-  // Build a set of day codes that have at least one session
-  const daysWithSessions = new Set(allSessions.map((s) => s.day));
-
-  // If today is a teaching day and has sessions, use it
+  // Saturday through Thursday: ALWAYS select today's teaching day initially
   if (currentJsDay !== 5) {
     const todayCode = getDayCodeFromJsDay(currentJsDay);
-    if (todayCode && daysWithSessions.has(todayCode)) {
+    if (todayCode) {
       return todayCode;
     }
   }
 
-  // Search forward through the week (up to 7 days) for a teaching day with sessions
-  for (let offset = 1; offset <= 7; offset++) {
-    const nextJsDay = (currentJsDay + offset) % 7;
-    if (nextJsDay === 5) continue; // Skip Friday
+  // Friday only: search forward for nearest teaching day that actually has sessions
+  const daysWithSessions = new Set(allSessions.map((s) => s.day));
+  for (let offset = 1; offset <= 6; offset++) {
+    const nextJsDay = (5 + offset) % 7;
+    if (nextJsDay === 5) continue;
     const nextCode = getDayCodeFromJsDay(nextJsDay);
     if (nextCode && daysWithSessions.has(nextCode)) {
       return nextCode;
     }
   }
 
-  // Completely empty schedule → fallback to Saturday
+  // Friday + completely empty schedule → fallback to Saturday
   return "س";
 }
 

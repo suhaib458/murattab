@@ -298,6 +298,21 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         expect(getCurrentSession(sessions, "13:00")).toBeNull();
         expect(getUpcomingSession(sessions, "13:00")).toBeNull();
       });
+
+      it("حجب علامة المحاضرة القادمة عندما تكون هناك محاضرة جارية حاليًا", () => {
+        // الساعة 09:30: lecture1 جارية (09:00 - 10:00)
+        const current = getCurrentSession(sessions, "09:30");
+        expect(current?.id).toBe("lec1");
+        // عندما توجد محاضرة جارية، يجب حجب المحاضرة القادمة
+        const upcoming = !current ? getUpcomingSession(sessions, "09:30") : null;
+        expect(upcoming).toBeNull();
+
+        // الساعة 10:15: لا توجد محاضرة جارية -> تظهر lecture2 كقادمة
+        const currentAt1015 = getCurrentSession(sessions, "10:15");
+        expect(currentAt1015).toBeNull();
+        const upcomingAt1015 = !currentAt1015 ? getUpcomingSession(sessions, "10:15") : null;
+        expect(upcomingAt1015?.id).toBe("lec2");
+      });
     });
 
     describe("البحث عن الجلسة الدراسية القادمة عبر الأيام (getNextScheduledSession)", () => {
@@ -414,45 +429,48 @@ describe("الجدول ومنطق المجال في مرتب", () => {
     const saturdaySession = { ...baseSession, id: "sat1", day: "س" as const };
     const tuesdaySession = { ...baseSession, id: "tue1", day: "ث" as const };
 
-    it("يختار اليوم الحالي إذا كان يوم تدريس وفيه محاضرات", () => {
-      // Sunday (jsDay=0) has sessions
+    it("يختار اليوم الحالي دائمًا من السبت إلى الخميس حتى لو لم تكن فيه محاضرات", () => {
+      // الأحد (jsDay=0) مع وجود محاضرات
       expect(getInitialScheduleDay([sundaySession], 0)).toBe("ح");
-      // Monday (jsDay=1) has sessions
+      // الاثنين (jsDay=1) مع وجود محاضرات
       expect(getInitialScheduleDay([mondaySession], 1)).toBe("ن");
-      // Saturday (jsDay=6) has sessions
+      // السبت (jsDay=6) مع وجود محاضرات
       expect(getInitialScheduleDay([saturdaySession], 6)).toBe("س");
+
+      // الأحد (jsDay=0) بدون محاضرات ولكن الاثنين فيه محاضرات => يختار الأحد
+      expect(getInitialScheduleDay([mondaySession], 0)).toBe("ح");
+      // الأربعاء (jsDay=3) بدون محاضرات ولكن الأحد فيه محاضرات => يختار الأربعاء
+      expect(getInitialScheduleDay([sundaySession], 3)).toBe("ر");
+      // السبت (jsDay=6) بدون محاضرات ولكن الثلاثاء فيه محاضرات => يختار السبت
+      expect(getInitialScheduleDay([tuesdaySession], 6)).toBe("س");
+
+      // جدول فارغ تمامًا في يوم تدريس عادي => يختار ذلك اليوم
+      expect(getInitialScheduleDay([], 0)).toBe("ح"); // الأحد
+      expect(getInitialScheduleDay([], 3)).toBe("ر"); // الأربعاء
+      expect(getInitialScheduleDay([], 6)).toBe("س"); // السبت
     });
 
-    it("يبحث للأمام من الجمعة حتى يجد أقرب يوم فيه محاضرات", () => {
-      // Friday (jsDay=5), Saturday has sessions
+    it("يوم الجمعة فقط: يبحث للأمام حتى يجد أقرب يوم تدريس فيه محاضرات", () => {
+      // الجمعة (jsDay=5)، السبت فيه محاضرات => السبت
       expect(getInitialScheduleDay([saturdaySession], 5)).toBe("س");
-      // Friday (jsDay=5), only Sunday has sessions
+      // الجمعة (jsDay=5)، السبت فارغ والأحد فيه محاضرات => الأحد
       expect(getInitialScheduleDay([sundaySession], 5)).toBe("ح");
-      // Friday (jsDay=5), only Tuesday has sessions
+      // الجمعة (jsDay=5)، فقط الثلاثاء فيه محاضرات => الثلاثاء
       expect(getInitialScheduleDay([tuesdaySession], 5)).toBe("ث");
     });
 
-    it("يبحث للأمام من يوم تدريس ليس فيه محاضرات", () => {
-      // Sunday (jsDay=0), but only Monday has sessions
-      expect(getInitialScheduleDay([mondaySession], 0)).toBe("ن");
-      // Saturday (jsDay=6), but only Tuesday has sessions
-      expect(getInitialScheduleDay([tuesdaySession], 6)).toBe("ث");
-    });
-
-    it("يعود إلى السبت عندما يكون الجدول فارغًا تمامًا", () => {
-      expect(getInitialScheduleDay([], 5)).toBe("س"); // Friday, empty
-      expect(getInitialScheduleDay([], 0)).toBe("س"); // Sunday, empty
-      expect(getInitialScheduleDay([], 3)).toBe("س"); // Wednesday, empty
+    it("يوم الجمعة مع جدول فارغ تمامًا يعود إلى السبت", () => {
+      expect(getInitialScheduleDay([], 5)).toBe("س");
     });
 
     it("يتعامل مع عدة أيام فيها محاضرات بشكل صحيح", () => {
       const allSessions = [sundaySession, mondaySession, tuesdaySession];
-      // On Sunday → pick Sunday
+      // في يوم الأحد => يختار الأحد
       expect(getInitialScheduleDay(allSessions, 0)).toBe("ح");
-      // On Friday → pick Saturday if it has sessions, else Sunday
+      // في يوم الجمعة => يبحث للأمام: السبت(لا يوجد)، الأحد(يوجد) => يختار الأحد
       expect(getInitialScheduleDay(allSessions, 5)).toBe("ح");
-      // On Wednesday → search forward: Thu(none), Fri(skip), Sat(none), Sun(yes)
-      expect(getInitialScheduleDay(allSessions, 3)).toBe("ح");
+      // في يوم الأربعاء (يوم تدريس) => يختار الأربعاء دائمًا
+      expect(getInitialScheduleDay(allSessions, 3)).toBe("ر");
     });
   });
 
