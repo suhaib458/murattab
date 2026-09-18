@@ -201,3 +201,139 @@ export function getDayCodeFromJsDay(jsDay: number): DayCode | null {
   return map[jsDay] ?? null;
 }
 
+/**
+ * Clean, natural Arabic duration formatting for UI messaging.
+ * Examples:
+ * - 1 min -> "دقيقة"
+ * - 8 min -> "8 دقائق"
+ * - 45 min -> "45 دقيقة"
+ * - 60 min -> "ساعة"
+ * - 75 min -> "ساعة و15 دقيقة"
+ * - 120 min -> "ساعتان"
+ * - 150 min -> "ساعتان و30 دقيقة"
+ */
+export function formatArabicDuration(minutes: number): string {
+  if (minutes <= 0) return "أقل من دقيقة";
+  if (minutes === 1) return "دقيقة";
+  if (minutes === 2) return "دقيقتان";
+  if (minutes >= 3 && minutes <= 10) return `${minutes} دقائق`;
+  if (minutes < 60) return `${minutes} دقيقة`;
+
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+
+  let hourText: string;
+  if (hours === 1) hourText = "ساعة";
+  else if (hours === 2) hourText = "ساعتان";
+  else if (hours >= 3 && hours <= 10) hourText = `${hours} ساعات`;
+  else hourText = `${hours} ساعة`;
+
+  if (rem === 0) return hourText;
+
+  let remText: string;
+  if (rem === 1) remText = "دقيقة";
+  else if (rem === 2) remText = "دقيقتان";
+  else if (rem >= 3 && rem <= 10) remText = `${rem} دقائق`;
+  else remText = `${rem} دقيقة`;
+
+  return `${hourText} و${remText}`;
+}
+
+export function getCurrentSession(sessions: ClassSession[], nowTime: string): ClassSession | null {
+  return sessions.find((s) => s.startsAt <= nowTime && s.endsAt > nowTime) ?? null;
+}
+
+export function getUpcomingSession(sessions: ClassSession[], nowTime: string): ClassSession | null {
+  const sorted = sortSessions(sessions);
+  return sorted.find((s) => s.startsAt > nowTime) ?? null;
+}
+
+export function getMinutesRemainingInSession(session: ClassSession, nowTime: string): number {
+  return Math.max(0, timeToMinutes(session.endsAt) - timeToMinutes(nowTime));
+}
+
+export function getMinutesUntilSession(session: ClassSession, nowTime: string): number {
+  return Math.max(0, timeToMinutes(session.startsAt) - timeToMinutes(nowTime));
+}
+
+export interface NextScheduledSession {
+  session: ClassSession;
+  dayCode: DayCode;
+  dayName: string;
+  daysAhead: number;
+}
+
+/**
+ * Finds the next scheduled session after the current moment, searching forward across the teaching week.
+ * Skips Friday (weekend) and searches up to one full weekly cycle (7 days ahead).
+ * Returns null if the student has no sessions scheduled.
+ */
+export function getNextScheduledSession(
+  allSessions: ClassSession[],
+  currentJsDay: number,
+  nowTime: string
+): NextScheduledSession | null {
+  if (allSessions.length === 0) return null;
+
+  // 1. Check today if it's a teaching day
+  if (currentJsDay !== 5) {
+    const todayCode = getDayCodeFromJsDay(currentJsDay);
+    if (todayCode) {
+      const todayUpcoming = sortSessions(allSessions.filter((s) => s.day === todayCode && s.startsAt > nowTime));
+      if (todayUpcoming.length > 0) {
+        return {
+          session: todayUpcoming[0],
+          dayCode: todayCode,
+          dayName: dayNames[todayCode],
+          daysAhead: 0
+        };
+      }
+    }
+  }
+
+  // 2. Check future days in weekly cycle (up to 7 days ahead)
+  for (let offset = 1; offset <= 7; offset++) {
+    const nextJsDay = (currentJsDay + offset) % 7;
+    if (nextJsDay === 5) continue; // Skip Friday
+    const nextCode = getDayCodeFromJsDay(nextJsDay);
+    if (!nextCode) continue;
+
+    const daySessions = sortSessions(allSessions.filter((s) => s.day === nextCode));
+    if (daySessions.length > 0) {
+      return {
+        session: daySessions[0],
+        dayCode: nextCode,
+        dayName: dayNames[nextCode],
+        daysAhead: offset
+      };
+    }
+  }
+
+  return null;
+}
+
+export type FreeTimeIntelligence =
+  | { status: "current"; currentSlot: FreeTimeSlot; minutesRemaining: number }
+  | { status: "upcoming"; nextSlot: FreeTimeSlot; minutesUntil: number }
+  | { status: "none" };
+
+export function getFreeTimeIntelligence(todaySessions: ClassSession[], nowTime: string): FreeTimeIntelligence {
+  const slots = calculateFreeTimeSlots(todaySessions);
+  if (slots.length === 0) return { status: "none" };
+
+  const currentSlot = slots.find((slot) => slot.startsAt <= nowTime && slot.endsAt > nowTime);
+  if (currentSlot) {
+    const minutesRemaining = Math.max(0, timeToMinutes(currentSlot.endsAt) - timeToMinutes(nowTime));
+    return { status: "current", currentSlot, minutesRemaining };
+  }
+
+  const nextSlot = slots.find((slot) => slot.startsAt > nowTime);
+  if (nextSlot) {
+    const minutesUntil = Math.max(0, timeToMinutes(nextSlot.startsAt) - timeToMinutes(nowTime));
+    return { status: "upcoming", nextSlot, minutesUntil };
+  }
+
+  return { status: "none" };
+}
+
+

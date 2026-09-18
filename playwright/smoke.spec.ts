@@ -316,5 +316,57 @@ test("الإعدادات تعرض بطاقة الطالب ومتغيرات ال�
   await expect(page.getByText("حول التطبيق")).toBeVisible();
 });
 
+test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحالية، الملخص، والفراغ)", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-04T09:30:00")); // 2026-10-04 is Sunday (ح)
+  await page.addInitScript(() => {
+    const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+    const courseId1 = "11111111-1111-4111-8111-111111111111";
+    const courseId2 = "22222222-2222-4222-8222-222222222222";
+    const snapshot = {
+      profile: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "ليان",
+        universityId: "ttu",
+        facultyId: "198b8f50-8932-5eea-b267-0b48dfde70fd",
+        majorId: "4d3811d3-7773-5c46-bdb4-373f2deb7222",
+        createdAt: new Date().toISOString()
+      },
+      settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      courses: [
+        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-04T00:00:00.000Z" },
+        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-04T00:00:00.000Z" }
+      ],
+      sessions: [
+        { id: "s1", courseId: courseId1, day: "ح", startsAt: "09:00", endsAt: "10:00", room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false }, kind: "lecture" },
+        { id: "s2", courseId: courseId2, day: "ح", startsAt: "11:30", endsAt: "13:00", room: { raw: "105 هـ", label: "كلية الهندسة – قاعة 105", isOnline: false }, kind: "lecture" }
+      ]
+    };
+    localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+  });
+
+  await page.goto("/");
+
+  // 1. Hero displays active lecture at 09:30
+  const hero = page.locator(".next-card");
+  await expect(hero).toBeVisible();
+  await expect(hero.getByText("المحاضرة الحالية")).toBeVisible();
+  await expect(hero.getByText("برمجة الويب")).toBeVisible();
+  await expect(hero.locator(".hero-status-pill")).toHaveText("متبقي 30 دقيقة");
+
+  // 2. Daily summary chips are visible
+  const summary = page.locator(".daily-summary");
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText("2 محاضرات")).toBeVisible();
+  await expect(summary.getByText("2 متبقية")).toBeVisible();
+
+  // 3. Free-time card displays upcoming break
+  const freeTime = page.locator(".free-time-card");
+  await expect(freeTime).toBeVisible();
+  await expect(freeTime.getByText("فترة الفراغ القادمة")).toBeVisible();
+  await expect(freeTime.getByText("ساعة و30 دقيقة")).toBeVisible();
+});
+
+
 
 
