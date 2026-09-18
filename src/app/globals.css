@@ -509,7 +509,152 @@ p { line-height: 1.65; }
 .session-card .time-block .start { font-weight: 700; font-size: 1.05rem; }
 .session-card .time-block .end { color: var(--foreground-muted); font-size: 0.9rem; }
 
+/* Phase 4.2: Session card state modifiers */
+.session-card.is-current {
+  border-inline-start: 4px solid var(--success);
+  background: color-mix(in srgb, var(--success) 6%, var(--surface));
+}
+.session-card.is-upcoming {
+  border-inline-start: 4px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+.session-card.has-conflict {
+  border-inline-start: 4px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 5%, var(--surface));
+}
+
+/* Phase 4.2: Session status badges (inline) */
+.session-status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+.session-status-badge.current {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+.session-status-badge.upcoming {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+.session-status-badge.conflict {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+}
+
+/* Phase 4.2: Session remaining time */
+.session-remaining { font-size: 0.85rem; margin-top: 4px; }
+
+/* Phase 4.2: Time gap separator */
+.time-gap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+.time-gap-line {
+  flex: 1;
+  height: 1px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--border) 0,
+    var(--border) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+.time-gap-label {
+  font-size: 0.8rem;
+  color: var(--foreground-muted);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* Phase 4.2: Day summary strip */
+.schedule-day-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  font-size: 0.88rem;
+  color: var(--foreground-muted);
+  margin-bottom: 14px;
+}
+.schedule-day-summary-sep { opacity: 0.5; }
+
+/* Phase 4.2: Schedule day bar (tabs + today button) */
+.schedule-day-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 14px;
+}
+.schedule-day-bar .tabs {
+  flex: 1;
+  margin: 0;
+}
+
+/* Phase 4.2: Today button */
+.today-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary);
+  border-radius: var(--radius-pill);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+}
+.today-btn:hover {
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+/* Phase 4.2: Today indicator dot on day tab */
+.tabs button.is-today { position: relative; }
+.tabs button.is-today::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.tabs button.is-today[aria-selected="true"]::after {
+  background: var(--primary-foreground);
+}
+
+/* Phase 4.2: Conflict banner */
+.conflict-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--warning);
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
 .empty { text-align: center; padding: 36px 16px; color: var(--foreground-muted); }
+
 
 /* -------------------------------------------------------------------------
    12. Tabs (day selector)
@@ -1156,7 +1301,7 @@ p { line-height: 1.65; }
 
 /* Hard guard: nothing should overflow the viewport horizontally. */
 html, body { overflow-x: hidden; }
-.app, .topbar, .hero, .calendar-shell, .next-card, .session-card, .tabs, .free-time-card, .settings-group, .profile-card, .settings-row { max-width: 100%; }
+.app, .topbar, .hero, .calendar-shell, .next-card, .session-card, .tabs, .free-time-card, .settings-group, .profile-card, .settings-row, .schedule-day-bar, .schedule-day-summary, .conflict-banner, .time-gap { max-width: 100%; }
 
 /* -------------------------------------------------------------------------
    21. Reduced motion

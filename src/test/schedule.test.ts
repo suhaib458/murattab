@@ -19,7 +19,9 @@ import {
   getMinutesRemainingInSession,
   getMinutesUntilSession,
   getNextScheduledSession,
-  getFreeTimeIntelligence
+  getFreeTimeIntelligence,
+  getInitialScheduleDay,
+  analyzeDayConflicts
 } from "@/domain/schedule";
 import { AcademicTermSchema, ClassSessionSchema } from "@/domain/models";
 import { getFirstOccurrenceDate } from "@/domain/calendar";
@@ -402,6 +404,123 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       });
     });
   });
-});
 
+  // =========================================================================
+  // Phase 4.2: getInitialScheduleDay
+  // =========================================================================
+  describe("اختيار اليوم الافتراضي عند فتح الجدول (getInitialScheduleDay)", () => {
+    const sundaySession = { ...baseSession, id: "sun1", day: "ح" as const };
+    const mondaySession = { ...baseSession, id: "mon1", day: "ن" as const };
+    const saturdaySession = { ...baseSession, id: "sat1", day: "س" as const };
+    const tuesdaySession = { ...baseSession, id: "tue1", day: "ث" as const };
+
+    it("يختار اليوم الحالي إذا كان يوم تدريس وفيه محاضرات", () => {
+      // Sunday (jsDay=0) has sessions
+      expect(getInitialScheduleDay([sundaySession], 0)).toBe("ح");
+      // Monday (jsDay=1) has sessions
+      expect(getInitialScheduleDay([mondaySession], 1)).toBe("ن");
+      // Saturday (jsDay=6) has sessions
+      expect(getInitialScheduleDay([saturdaySession], 6)).toBe("س");
+    });
+
+    it("يبحث للأمام من الجمعة حتى يجد أقرب يوم فيه محاضرات", () => {
+      // Friday (jsDay=5), Saturday has sessions
+      expect(getInitialScheduleDay([saturdaySession], 5)).toBe("س");
+      // Friday (jsDay=5), only Sunday has sessions
+      expect(getInitialScheduleDay([sundaySession], 5)).toBe("ح");
+      // Friday (jsDay=5), only Tuesday has sessions
+      expect(getInitialScheduleDay([tuesdaySession], 5)).toBe("ث");
+    });
+
+    it("يبحث للأمام من يوم تدريس ليس فيه محاضرات", () => {
+      // Sunday (jsDay=0), but only Monday has sessions
+      expect(getInitialScheduleDay([mondaySession], 0)).toBe("ن");
+      // Saturday (jsDay=6), but only Tuesday has sessions
+      expect(getInitialScheduleDay([tuesdaySession], 6)).toBe("ث");
+    });
+
+    it("يعود إلى السبت عندما يكون الجدول فارغًا تمامًا", () => {
+      expect(getInitialScheduleDay([], 5)).toBe("س"); // Friday, empty
+      expect(getInitialScheduleDay([], 0)).toBe("س"); // Sunday, empty
+      expect(getInitialScheduleDay([], 3)).toBe("س"); // Wednesday, empty
+    });
+
+    it("يتعامل مع عدة أيام فيها محاضرات بشكل صحيح", () => {
+      const allSessions = [sundaySession, mondaySession, tuesdaySession];
+      // On Sunday → pick Sunday
+      expect(getInitialScheduleDay(allSessions, 0)).toBe("ح");
+      // On Friday → pick Saturday if it has sessions, else Sunday
+      expect(getInitialScheduleDay(allSessions, 5)).toBe("ح");
+      // On Wednesday → search forward: Thu(none), Fri(skip), Sat(none), Sun(yes)
+      expect(getInitialScheduleDay(allSessions, 3)).toBe("ح");
+    });
+  });
+
+  // =========================================================================
+  // Phase 4.2: analyzeDayConflicts
+  // =========================================================================
+  describe("تحليل تعارضات اليوم (analyzeDayConflicts)", () => {
+    it("لا يكتشف تعارض في محاضرات متتالية (back-to-back)", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:00" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(0);
+      expect(result.conflictingSessionIds.size).toBe(0);
+    });
+
+    it("يكتشف تعارض واحد بين محاضرتين متداخلتين ولا يعدّه مرتين", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:30" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(1);
+      expect(result.conflictingSessionIds.size).toBe(2);
+      expect(result.conflictingSessionIds.has("s1")).toBe(true);
+      expect(result.conflictingSessionIds.has("s2")).toBe(true);
+    });
+
+    it("يتعامل مع عدة تعارضات متعددة بشكل صحيح", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:30" },
+        { ...baseSession, id: "s2", startsAt: "09:00", endsAt: "10:00" },
+        { ...baseSession, id: "s3", startsAt: "12:00", endsAt: "13:30" },
+        { ...baseSession, id: "s4", startsAt: "13:00", endsAt: "14:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(2);
+      expect(result.conflictingSessionIds.size).toBe(4);
+    });
+
+    it("يتعامل مع ثلاث محاضرات متداخلة في نفس الفترة", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "10:00" },
+        { ...baseSession, id: "s2", startsAt: "08:30", endsAt: "09:30" },
+        { ...baseSession, id: "s3", startsAt: "09:00", endsAt: "10:30" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      // s1↔s2, s1↔s3, s2↔s3 = 3 unique pairs
+      expect(result.conflictPairCount).toBe(3);
+      expect(result.conflictingSessionIds.size).toBe(3);
+    });
+
+    it("يعيد صفر عندما لا توجد محاضرات أو محاضرة واحدة فقط", () => {
+      expect(analyzeDayConflicts([]).conflictPairCount).toBe(0);
+      expect(analyzeDayConflicts([baseSession]).conflictPairCount).toBe(0);
+    });
+
+    it("لا يعتبر المحاضرات غير المتداخلة تعارضات", () => {
+      const sessions = [
+        { ...baseSession, id: "s1", startsAt: "08:00", endsAt: "09:00" },
+        { ...baseSession, id: "s2", startsAt: "10:00", endsAt: "11:00" },
+        { ...baseSession, id: "s3", startsAt: "12:00", endsAt: "13:00" }
+      ];
+      const result = analyzeDayConflicts(sessions);
+      expect(result.conflictPairCount).toBe(0);
+      expect(result.conflictingSessionIds.size).toBe(0);
+    });
+  });
+});
 
