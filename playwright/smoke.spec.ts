@@ -708,3 +708,110 @@ test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
   });
 });
 
+test.describe("Phase 4.2.2: Hard-Reload Existing User Theme Fallback (without murattab-theme)", () => {
+  const setupExistingUser = (theme: "light" | "dark" | "system") => {
+    const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
+    return {
+      profile: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "ليان",
+        universityId: "ttu",
+        facultyId: "198b8f50-8932-5eea-b267-0b48dfde70fd",
+        majorId: "4d3811d3-7773-5c46-bdb4-373f2deb7222",
+        createdAt: new Date().toISOString()
+      },
+      settings: {
+        id: "settings",
+        theme,
+        onboardingComplete: true,
+        splashShown: true,
+        activeTermId: termId,
+        guideSeen: true,
+        completedGuideVersion: 1,
+        schemaVersion: 1
+      },
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      courses: [],
+      sessions: []
+    };
+  };
+
+  test("A: Existing snapshot theme='dark' on light device initializes dark before hydration without murattab-theme", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      localStorage.removeItem("murattab-theme");
+      sessionStorage.setItem("murattab-splash", "1");
+
+      (window as unknown as { __initialTheme: string | null }).__initialTheme = null;
+      document.addEventListener("DOMContentLoaded", () => {
+        (window as unknown as { __initialTheme: string | null }).__initialTheme = document.documentElement.getAttribute("data-theme");
+      });
+    }, setupExistingUser("dark"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+
+    // Verify dark was set immediately before hydration at DOMContentLoaded
+    const initialTheme = await page.evaluate(() => (window as unknown as { __initialTheme: string | null }).__initialTheme);
+    expect(initialTheme).toBe("dark");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+  });
+
+  test("B: Existing snapshot theme='system' on dark device initializes dark before hydration without murattab-theme", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      localStorage.removeItem("murattab-theme");
+      sessionStorage.setItem("murattab-splash", "1");
+
+      (window as unknown as { __initialTheme: string | null }).__initialTheme = null;
+      document.addEventListener("DOMContentLoaded", () => {
+        (window as unknown as { __initialTheme: string | null }).__initialTheme = document.documentElement.getAttribute("data-theme");
+      });
+    }, setupExistingUser("system"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+
+    const initialTheme = await page.evaluate(() => (window as unknown as { __initialTheme: string | null }).__initialTheme);
+    expect(initialTheme).toBe("dark");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("dark");
+  });
+
+  test("C: Existing snapshot theme='light' on dark device remains light without murattab-theme", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      localStorage.removeItem("murattab-theme");
+      sessionStorage.setItem("murattab-splash", "1");
+
+      (window as unknown as { __initialTheme: string | null }).__initialTheme = null;
+      document.addEventListener("DOMContentLoaded", () => {
+        (window as unknown as { __initialTheme: string | null }).__initialTheme = document.documentElement.getAttribute("data-theme");
+      });
+    }, setupExistingUser("light"));
+
+    await page.goto("/");
+    await expect(page.locator(".topbar")).toBeVisible();
+
+    const initialTheme = await page.evaluate(() => (window as unknown as { __initialTheme: string | null }).__initialTheme);
+    expect(initialTheme).toBeNull();
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  });
+
+  test("D: Corrupted murattab-fallback-v1 does not crash theme bootstrap or page load", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => {
+      localStorage.setItem("murattab-fallback-v1", "{corrupt-json-payload:::;");
+      localStorage.removeItem("murattab-theme");
+      sessionStorage.setItem("murattab-splash", "1");
+    });
+
+    // Should load cleanly without throwing unhandled script error in head
+    await page.goto("/");
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBeNull();
+  });
+});
+
+

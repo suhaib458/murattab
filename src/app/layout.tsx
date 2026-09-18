@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   viewportFit: "cover"
 };
 
-const themeScript = `(function(){try{var t=localStorage.getItem("murattab-theme");if(t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("murattab-theme");if(t!=="light"&&t!=="dark"&&t!=="system"){t=null;var r=localStorage.getItem("murattab-fallback-v1");if(r){var s=JSON.parse(r);var st=s&&s.settings&&s.settings.theme;if(st==="light"||st==="dark"||st==="system"){t=st;}}}if(t==="dark"){document.documentElement.setAttribute("data-theme","dark");}else if(t==="light"){document.documentElement.removeAttribute("data-theme");}else if(t==="system"){if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.setAttribute("data-theme","dark");}else{document.documentElement.removeAttribute("data-theme");}}}catch(e){}})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
