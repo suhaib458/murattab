@@ -315,6 +315,20 @@ test("الإعدادات تعرض بطاقة الطالب ومتغيرات ال�
   await expect(page.getByText("البيانات والنسخ الاحتياطي")).toBeVisible();
   await expect(page.getByRole("heading", { name: "التقويم الأكاديمي", level: 2 })).toBeVisible();
   await expect(page.getByText("حول التطبيق")).toBeVisible();
+
+  // Social follow section inside About card
+  await expect(page.getByText("صُنع بجهد وحب لطلاب الجامعة")).toBeVisible();
+  await expect(page.getByText("إذا عجبكم «مرتب»، دعمكم بمتابعتنا بيفرق 🤍")).toBeVisible();
+
+  const igLink = page.locator('a[href="https://instagram.com/suhaib.s6"]');
+  await expect(igLink).toBeVisible();
+  await expect(igLink).toHaveAttribute("target", "_blank");
+  await expect(igLink).toHaveAttribute("rel", "noopener noreferrer");
+
+  const liLink = page.locator('a[href="https://www.linkedin.com/in/suhaib-abu-afifeh"]');
+  await expect(liLink).toBeVisible();
+  await expect(liLink).toHaveAttribute("target", "_blank");
+  await expect(liLink).toHaveAttribute("rel", "noopener noreferrer");
 });
 
 test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحالية، الملخص، والفراغ)", async ({ page }) => {

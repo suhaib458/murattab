@@ -346,6 +346,66 @@ export function SettingsView({
             <p>مرتب 0.1.0 · محلي بالكامل. لا تُرسل بياناتك إلى أي خادم.</p>
           </div>
         </div>
+
+        <div className="about-social-section">
+          <div className="about-social-header">
+            <h4 className="about-social-title">صُنع بجهد وحب لطلاب الجامعة</h4>
+            <p className="about-social-subtitle">إذا عجبكم «مرتب»، دعمكم بمتابعتنا بيفرق 🤍</p>
+          </div>
+          <div className="about-social-links">
+            <a
+              href="https://instagram.com/suhaib.s6"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="about-social-link"
+              aria-label="متابعة على إنستغرام: @suhaib.s6 (يفتح في علامة تبويب جديدة)"
+            >
+              <span className="about-social-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+              </span>
+              <span className="about-social-label">
+                <span className="about-social-network">Instagram</span>
+              </span>
+              <span className="about-social-external" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </span>
+            </a>
+
+            <a
+              href="https://www.linkedin.com/in/suhaib-abu-afifeh"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="about-social-link"
+              aria-label="زيارة الحساب على لينكد إن (يفتح في علامة تبويب جديدة)"
+            >
+              <span className="about-social-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                  <rect x="2" y="9" width="4" height="12" />
+                  <circle cx="4" cy="4" r="2" />
+                </svg>
+              </span>
+              <span className="about-social-label">
+                <span className="about-social-network">LinkedIn</span>
+              </span>
+              <span className="about-social-external" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </span>
+            </a>
+          </div>
+        </div>
       </div>
 
       {confirmClear && (
