@@ -114,7 +114,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
     }
 
     if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
-      setErrorMessage("حجم الملف يتجاوز الحد الأقصى المسموح به وهو 10 ميجابايت.");
+      setErrorMessage("حجم الملف يتجاوز الحد الأقصى المسموح به وهو 4 ميجابايت.");
       return;
     }
 
@@ -511,7 +511,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
                 {file ? file.name : "اضغط لاختيار ملف أو اسحبه إلى هنا"}
               </p>
               <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
-                الصيغ المدعومة: JPG, PNG, WebP, PDF (حتى 10 ميجابايت)
+                الصيغ المدعومة: JPG, PNG, WebP, PDF (حتى 4 ميجابايت)
               </p>
             </div>
 

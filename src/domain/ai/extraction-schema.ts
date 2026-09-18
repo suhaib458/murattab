@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ExtractionIssueSchema } from "../models";
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+export const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
 export const SUPPORTED_MIME_TYPES = [
   "image/jpeg",
@@ -26,7 +26,7 @@ export function validateUploadFile(file: { size: number; type: string }): { vali
   if (file.size > MAX_FILE_SIZE_BYTES) {
     return {
       valid: false,
-      error: "حجم الملف يتجاوز الحد الأقصى المسموح به وهو 10 ميجابايت."
+      error: "حجم الملف يتجاوز الحد الأقصى المسموح به وهو 4 ميجابايت."
     };
   }
   return { valid: true };

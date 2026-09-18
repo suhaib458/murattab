@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GeminiScheduleExtractor } from "@/domain/ai/gemini-extractor";
+import { XKiroScheduleExtractor } from "@/domain/ai/xkiro-extractor";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 import { ScheduleExtractionResultSchema, type ScheduleExtractor } from "@/domain/models";
 
@@ -47,13 +47,13 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json(
-        { success: false, error: "حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)." },
+        { success: false, error: "حجم الملف يتجاوز الحد الأقصى المسموح به (4 ميجابايت)." },
         { status: 400 }
       );
     }
 
     // Check API Key unless a test extractor is injected
-    if (!defaultExtractor && !process.env.GEMINI_API_KEY) {
+    if (!defaultExtractor && !process.env.XKIRO_API_KEY) {
       return NextResponse.json(
         { success: false, error: "ميزة التحليل الذكي غير مهيأة في بيئة التشغيل الحالية." },
         { status: 503 }
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
-    const extractor = defaultExtractor || new GeminiScheduleExtractor();
+    const extractor = defaultExtractor || new XKiroScheduleExtractor();
     const result = await extractor.extract({
       fileName: (file as any).name || "schedule_file",
       bytes,
@@ -79,21 +79,25 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Schedule extraction error:", error);
 
-    if (error.message === "GEMINI_API_KEY_MISSING") {
+    if (error.message === "AI_API_KEY_MISSING" || error.message === "GEMINI_API_KEY_MISSING") {
       return NextResponse.json(
         { success: false, error: "ميزة التحليل الذكي غير مهيأة في بيئة التشغيل الحالية." },
         { status: 503 }
       );
     }
 
-    if (error.message === "GEMINI_API_INVALID_KEY") {
+    if (error.message === "AI_INVALID_KEY" || error.message === "GEMINI_API_INVALID_KEY") {
       return NextResponse.json(
         { success: false, error: "مفتاح التحليل غير صالح أو منتهي الصلاحية." },
         { status: 503 }
       );
     }
 
-    if (error.message === "GEMINI_MODEL_UNAVAILABLE" || error.message?.includes("404")) {
+    if (
+      error.message === "AI_MODEL_UNAVAILABLE" ||
+      error.message === "GEMINI_MODEL_UNAVAILABLE" ||
+      error.message?.includes("404")
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -103,7 +107,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error.message === "GEMINI_SERVICE_UNAVAILABLE" || error.message?.includes("503")) {
+    if (
+      error.message === "AI_SERVICE_UNAVAILABLE" ||
+      error.message === "GEMINI_SERVICE_UNAVAILABLE" ||
+      error.message?.includes("503")
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -113,7 +121,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error.message === "GEMINI_RATE_LIMITED" || error.message?.includes("429")) {
+    if (
+      error.message === "AI_RATE_LIMITED" ||
+      error.message === "GEMINI_RATE_LIMITED" ||
+      error.message?.includes("429")
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -123,13 +135,57 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error.message === "GEMINI_INVALID_INPUT") {
+    if (error.message === "AI_INVALID_INPUT_PDF_PAGE_LIMIT") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ملف PDF يتجاوز الحد الأقصى للصفحات المدعومة للجدول الدراسي (بحد أقصى 5 صفحات)."
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error.message === "AI_INVALID_INPUT_PDF_TOO_LARGE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "أبعاد صفحات ملف PDF تتجاوز الحد المسموح به للمعالجة الآمنة."
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error.message === "AI_INVALID_INPUT_PAYLOAD_TOO_LARGE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "حجم البيانات الناتجة عن معالجة صفحات الجدول يتجاوز الحد الداخلي الآمن للإرسال."
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error.message === "AI_INVALID_INPUT" || error.message === "GEMINI_INVALID_INPUT") {
       return NextResponse.json(
         {
           success: false,
           error: "تعذر على مزود الذكاء الاصطناعي معالجة هذا الملف. يرجى التأكد من وضوح الصورة وصلاحيتها والمحاولة مجددًا."
         },
         { status: 400 }
+      );
+    }
+
+    if (
+      error.message === "AI_INVALID_RESPONSE" ||
+      error.message === "EMPTY_AI_RESPONSE" ||
+      error.message === "INVALID_JSON_FROM_AI"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "تعذر قراءة نتائج التحليل من مزود الذكاء الاصطناعي. يرجى إعادة المحاولة."
+        },
+        { status: 502 }
       );
     }
 

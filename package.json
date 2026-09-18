@@ -18,8 +18,10 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@hyzyla/pdfium": "^2.1.13",
     "dexie": "^4.4.6",
     "next": "^16.3.5",
+    "pngjs": "^7.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.2",
@@ -28,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.10.1",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",

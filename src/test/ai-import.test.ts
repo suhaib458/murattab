@@ -27,14 +27,17 @@ describe("Smart Schedule Import - File & Schema Validation", () => {
     expect(isSupportedMimeType("text/plain")).toBe(false);
   });
 
-  it("validates file size limits (max 10MB)", () => {
-    const validImage = { size: 5 * 1024 * 1024, type: "image/png" };
+  it("validates file size limits (max 4MB)", () => {
+    const validImage = { size: 2 * 1024 * 1024, type: "image/png" };
     expect(validateUploadFile(validImage).valid).toBe(true);
 
-    const oversizedFile = { size: 10 * 1024 * 1024 + 1, type: "image/png" };
+    const boundaryImage = { size: 4 * 1024 * 1024, type: "image/png" };
+    expect(validateUploadFile(boundaryImage).valid).toBe(true);
+
+    const oversizedFile = { size: 4 * 1024 * 1024 + 1, type: "image/png" };
     const resultOver = validateUploadFile(oversizedFile);
     expect(resultOver.valid).toBe(false);
-    expect(resultOver.error).toContain("10 ميجابايت");
+    expect(resultOver.error).toContain("4 ميجابايت");
 
     const unsupportedType = { size: 1024, type: "video/mp4" };
     const resultType = validateUploadFile(unsupportedType);
