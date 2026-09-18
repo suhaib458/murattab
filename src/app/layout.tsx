@@ -15,11 +15,21 @@ export const metadata: Metadata = {
   title: "مرتب",
   description: "جدولك الجامعي، أوضح وأقرب إليك.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "مرتب" }
+  appleWebApp: { capable: true, title: "مرتب" },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png"
+  },
+  openGraph: {
+    title: "مرتب",
+    description: "جدولك الجامعي، أوضح وأقرب إليك.",
+    locale: "ar",
+    type: "website"
+  }
 };
 
 export const viewport: Viewport = {
-  themeColor: "#103B32",
+  themeColor: "#7A1827",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover"
