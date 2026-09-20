@@ -7,6 +7,7 @@ import { dayNames, expandRoom, findConflicts, formatArabicTime, getIctLabLabel, 
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 import { generateId } from "@/lib/uuid";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 interface ImportDialogProps {
   data: AppSnapshot;
@@ -138,6 +139,10 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
   const [confirmConflict, setConfirmConflict] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    trackProductEvent("smart_import_opened");
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -183,6 +188,16 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
     setFile(selectedFile);
 
+    trackProductEvent("schedule_file_selected", {
+      file_type: selectedFile.type === "application/pdf" ? "pdf" : "image",
+      file_size_bucket:
+        selectedFile.size < 500 * 1024
+          ? "under_500kb"
+          : selectedFile.size < 2 * 1024 * 1024
+            ? "500kb_to_2mb"
+            : "2mb_to_4mb"
+    });
+
     if (selectedFile.type.startsWith("image/")) {
       const url = URL.createObjectURL(selectedFile);
       setPreviewUrl(url);
@@ -210,6 +225,10 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
     analysisAttemptRef.current += 1;
     const currentAttempt = analysisAttemptRef.current;
+
+    trackProductEvent("schedule_analysis_started", {
+      file_type: file.type === "application/pdf" ? "pdf" : "image"
+    });
 
     setErrorMessage(null);
     setStep("analyzing");
@@ -244,6 +263,18 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
       if (!res.ok || !resData?.success) {
         const msg = resData?.error || "تعذر إكمال التحليل الذكي للجدول.";
+        trackProductEvent("schedule_analysis_failed", {
+          file_type: file.type === "application/pdf" ? "pdf" : "image",
+          reason:
+            res.status === 429
+              ? "rate_limited"
+              : res.status >= 500
+                ? "provider_unavailable"
+                : res.ok
+                  ? "invalid_response"
+                  : "request_rejected",
+          http_status: res.status
+        });
         setErrorMessage(msg);
         setStep("upload");
         return;
@@ -254,13 +285,27 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
       setExtractedCourses(initialCourses);
       setExtractionIssues(result.draft.issues || []);
+      trackProductEvent("schedule_analysis_succeeded", {
+        file_type: file.type === "application/pdf" ? "pdf" : "image",
+        course_count: result.draft.courses.length,
+        session_count: result.draft.courses.reduce((sum, course) => sum + course.sessions.length, 0),
+        issue_count: result.draft.issues?.length ?? 0
+      });
       setStep("review");
     } catch (err: any) {
       if (currentAttempt !== analysisAttemptRef.current) return;
 
       if (err.name === "AbortError") {
+        trackProductEvent("schedule_analysis_failed", {
+          file_type: file.type === "application/pdf" ? "pdf" : "image",
+          reason: "aborted"
+        });
         setErrorMessage("تم إلغاء عملية التحليل.");
       } else {
+        trackProductEvent("schedule_analysis_failed", {
+          file_type: file.type === "application/pdf" ? "pdf" : "image",
+          reason: "network_error"
+        });
         setErrorMessage("حدث خطأ في الاتصال أثناء التحليل. يرجى المحاولة مرة أخرى.");
       }
       setStep("upload");
@@ -483,6 +528,13 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
       await repo.saveCourses(batchToSave);
       await saved();
+
+      trackProductEvent("schedule_adopted", {
+        course_count: batchToSave.length,
+        session_count: batchToSave.reduce((sum, item) => sum + item.sessions.length, 0),
+        replaced_course_count: extractedCourses.filter((course) => course.duplicateAction === "replace").length,
+        had_conflicts: conflicts.length > 0
+      });
 
       notify(`تم اعتماد وحفظ ${batchToSave.length} مواد في جدولك بنجاح.`);
       close();
