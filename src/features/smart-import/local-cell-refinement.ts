@@ -1235,10 +1235,31 @@ export async function refineTableCells(
         skipPreprocessing: true
       });
 
-      // 1. Check for multi-session meeting cells using 2D spatial entity grouping
+      // 1. Check for multi-session meeting cells using 2D spatial entity grouping.
+      // Instead of trusting one PSM wholesale, arbitrate PER time range. This
+      // lets PSM11 supply the better upper session while PSM6 supplies the
+      // better lower session (or vice versa) without cross-line contamination.
       const entities11 = groupMeetingEntities(resPsm11.words, cropBbox, scaleFactor);
       const entities6 = groupMeetingEntities(resPsm6.words, cropBbox, scaleFactor);
-      const multiEntities = entities11.length >= 2 ? entities11 : entities6.length >= 2 ? entities6 : null;
+
+      const bestByTimeRange = new Map<string, MeetingEntity>();
+      for (const entity of [...entities11, ...entities6]) {
+        if (!entity.timeRange || !entity.timeRange.includes("-")) continue;
+        const existing = bestByTimeRange.get(entity.timeRange);
+        const entityScore = scoreMeetingText(entity.text, entity.confidence);
+        const existingScore = existing
+          ? scoreMeetingText(existing.text, existing.confidence)
+          : Number.NEGATIVE_INFINITY;
+
+        if (!existing || entityScore > existingScore) {
+          bestByTimeRange.set(entity.timeRange, entity);
+        }
+      }
+
+      const multiEntities =
+        bestByTimeRange.size >= 2
+          ? [...bestByTimeRange.values()].sort((a, b) => a.bbox.y0 - b.bbox.y0)
+          : null;
 
       if (multiEntities && multiEntities.length >= 2) {
         const segments: TtuCellSegment[] = multiEntities.map((ent) => ({
@@ -1271,7 +1292,7 @@ export async function refineTableCells(
         continue;
       }
 
-      // 2. Single-session cell: arbitrate between PSM 6, PSM 13, and baseline
+      // 2. Single-session cell: arbitrate between PSM 6, PSM 7, PSM 13, and baseline
       const textPsm6 = resPsm6.text.trim();
       const textPsm7 = resPsm7.text.trim();
       const textPsm13 = resPsm13.text.trim();
