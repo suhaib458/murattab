@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="430" viewBox="0 0 1500 430" role="img" aria-labelledby="title desc">
+  <title id="title">Murattab Smart Import flow</title>
+  <desc id="desc">The user uploads a schedule, explicitly consents to AI analysis, reviews the extracted draft, then saves the approved schedule locally.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#8b756b"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fffaf3"/>
+      <stop offset="1" stop-color="#f7f2eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="1500" height="430" rx="34" fill="url(#bg)" stroke="#eee1d5"/>
+  <text x="750" y="70" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#651525">Smart Schedule Import</text>
+  <text x="750" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#746860">Files are analyzed only after explicit consent; users review the draft before local save.</text>
+
+  <g font-family="Arial, sans-serif">
+    <g>
+      <rect x="70" y="175" width="235" height="145" rx="24" fill="#ffffff" stroke="#e8dcd2"/>
+      <text x="188" y="225" text-anchor="middle" font-size="24" font-weight="700" fill="#2e2926">1. Upload</text>
+      <text x="188" y="263" text-anchor="middle" font-size="18" fill="#756b64">JPG • PNG • WebP • PDF</text>
+      <text x="188" y="292" text-anchor="middle" font-size="17" fill="#756b64">with explicit consent</text>
+    </g>
+    <path d="M315 247H390" stroke="#8b756b" stroke-width="4" marker-end="url(#arrow)"/>
+
+    <g>
+      <rect x="405" y="175" width="235" height="145" rx="24" fill="#ffffff" stroke="#e8dcd2"/>
+      <text x="523" y="225" text-anchor="middle" font-size="24" font-weight="700" fill="#2e2926">2. Extract</text>
+      <text x="523" y="263" text-anchor="middle" font-size="18" fill="#756b64">Gemini API</text>
+      <text x="523" y="292" text-anchor="middle" font-size="17" fill="#756b64">bounded model failover</text>
+    </g>
+    <path d="M650 247H725" stroke="#8b756b" stroke-width="4" marker-end="url(#arrow)"/>
+
+    <g>
+      <rect x="740" y="175" width="235" height="145" rx="24" fill="#ffffff" stroke="#e8dcd2"/>
+      <text x="858" y="225" text-anchor="middle" font-size="24" font-weight="700" fill="#2e2926">3. Review</text>
+      <text x="858" y="263" text-anchor="middle" font-size="18" fill="#756b64">edit extracted fields</text>
+      <text x="858" y="292" text-anchor="middle" font-size="17" fill="#756b64">resolve conflicts first</text>
+    </g>
+    <path d="M985 247H1060" stroke="#8b756b" stroke-width="4" marker-end="url(#arrow)"/>
+
+    <g>
+      <rect x="1075" y="175" width="235" height="145" rx="24" fill="#ffffff" stroke="#e8dcd2"/>
+      <text x="1193" y="225" text-anchor="middle" font-size="24" font-weight="700" fill="#2e2926">4. Save locally</text>
+      <text x="1193" y="263" text-anchor="middle" font-size="18" fill="#756b64">IndexedDB / Dexie</text>
+      <text x="1193" y="292" text-anchor="middle" font-size="17" fill="#756b64">no account required</text>
+    </g>
+  </g>
+  <text x="750" y="380" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#7d7067">Exact-file cache + anonymous burst protection reduce unnecessary AI requests.</text>
+</svg>
