@@ -21,6 +21,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@hyzyla/pdfium": "^2.1.13",
+    "@vercel/analytics": "^2.0.1",
     "dexie": "^4.4.6",
     "next": "^16.3.5",
     "pngjs": "^7.0.0",
