@@ -47,8 +47,10 @@ const FULL_DAY_NAMES: Readonly<Record<string, DayCode>> = {
 function cleanDayToken(token: string): string {
   return token
     .replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "")
-    .replace(/^[,،;؛|/\\()[\]{}]+|[,،;؛|/\\()[\]{}]+$/g, "")
-    .trim();
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+/gu, "")
+    .replace(/[^\p{L}\p{N}]+$/gu, "")
+    .replace(/[,،]/g, "");
 }
 
 function pushUniqueDay(days: DayCode[], seen: Set<DayCode>, code: DayCode): void {
