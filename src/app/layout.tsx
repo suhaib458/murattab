@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Alexandria } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import "./splash.css";
 import { MurattabApp } from "@/components/murattab-app";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <MurattabApp>{children}</MurattabApp>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
