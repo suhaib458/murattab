@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" role="img" aria-labelledby="title desc">
+  <title id="title">Murattab feature overview</title>
+  <desc id="desc">Four core Murattab capabilities: Smart Import, Today and Weekly Schedule, Academic Calendar, and Local-first PWA.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#faf6ef"/>
+      <stop offset="1" stop-color="#f1e8dc"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#5b1b27" flood-opacity=".10"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="760" rx="40" fill="url(#bg)"/>
+  <circle cx="1240" cy="95" r="180" fill="#7d1428" opacity=".06"/>
+  <circle cx="155" cy="700" r="230" fill="#3d7f72" opacity=".06"/>
+  <text x="700" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#651525">Murattab</text>
+  <text x="700" y="145" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#6b615a">A clearer university schedule, from upload to everyday use</text>
+
+  <g filter="url(#shadow)">
+    <rect x="90" y="220" width="280" height="390" rx="28" fill="#fffdf9" stroke="#eadfd3"/>
+    <rect x="400" y="220" width="280" height="390" rx="28" fill="#fffdf9" stroke="#eadfd3"/>
+    <rect x="710" y="220" width="280" height="390" rx="28" fill="#fffdf9" stroke="#eadfd3"/>
+    <rect x="1020" y="220" width="280" height="390" rx="28" fill="#fffdf9" stroke="#eadfd3"/>
+  </g>
+
+  <g font-family="Arial, sans-serif">
+    <circle cx="230" cy="325" r="58" fill="#f4e5e7"/>
+    <path d="M206 327h48M230 303v48" stroke="#7d1428" stroke-width="10" stroke-linecap="round"/>
+    <text x="230" y="425" text-anchor="middle" font-size="27" font-weight="700" fill="#2e2926">Smart Import</text>
+    <text x="230" y="468" text-anchor="middle" font-size="19" fill="#756b64">Upload image or PDF</text>
+    <text x="230" y="500" text-anchor="middle" font-size="19" fill="#756b64">AI extracts courses, times</text>
+    <text x="230" y="532" text-anchor="middle" font-size="19" fill="#756b64">days and rooms</text>
+
+    <circle cx="540" cy="325" r="58" fill="#e5f0ed"/>
+    <rect x="506" y="294" width="68" height="65" rx="10" fill="none" stroke="#3d7f72" stroke-width="8"/>
+    <path d="M506 316h68M522 282v24M558 282v24" stroke="#3d7f72" stroke-width="8" stroke-linecap="round"/>
+    <text x="540" y="425" text-anchor="middle" font-size="27" font-weight="700" fill="#2e2926">Daily &amp; Weekly</text>
+    <text x="540" y="468" text-anchor="middle" font-size="19" fill="#756b64">Today, next lecture</text>
+    <text x="540" y="500" text-anchor="middle" font-size="19" fill="#756b64">theory / lab sessions</text>
+    <text x="540" y="532" text-anchor="middle" font-size="19" fill="#756b64">and room details</text>
+
+    <circle cx="850" cy="325" r="58" fill="#f2eadb"/>
+    <path d="M818 310h64v56h-64zM818 327h64" fill="none" stroke="#a47a32" stroke-width="8" stroke-linejoin="round"/>
+    <circle cx="837" cy="346" r="5" fill="#a47a32"/><circle cx="857" cy="346" r="5" fill="#a47a32"/><circle cx="877" cy="346" r="5" fill="#a47a32"/>
+    <text x="850" y="425" text-anchor="middle" font-size="27" font-weight="700" fill="#2e2926">Academic Calendar</text>
+    <text x="850" y="468" text-anchor="middle" font-size="19" fill="#756b64">Monthly lecture view</text>
+    <text x="850" y="500" text-anchor="middle" font-size="19" fill="#756b64">term-aware recurrence</text>
+    <text x="850" y="532" text-anchor="middle" font-size="19" fill="#756b64">and academic events</text>
+
+    <circle cx="1160" cy="325" r="58" fill="#ece8f3"/>
+    <path d="M1135 292h50v68h-50zM1150 349h20" fill="none" stroke="#61527b" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="1160" y="425" text-anchor="middle" font-size="27" font-weight="700" fill="#2e2926">Local-first PWA</text>
+    <text x="1160" y="468" text-anchor="middle" font-size="19" fill="#756b64">Installable on devices</text>
+    <text x="1160" y="500" text-anchor="middle" font-size="19" fill="#756b64">schedule stored locally</text>
+    <text x="1160" y="532" text-anchor="middle" font-size="19" fill="#756b64">offline-friendly navigation</text>
+  </g>
+
+  <text x="700" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#7d7067">Arabic-first • RTL • Mobile-first • Built initially for Tafila Technical University</text>
+</svg>
