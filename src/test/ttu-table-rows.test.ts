@@ -112,4 +112,83 @@ describe("TTU Row Detector — Anchors & Multi-Segment Grouping", () => {
     // Last course row bottom must exclude y=600 footer
     expect(result.rowBands[3].yBottom).toBeLessThan(550);
   });
+
+  it("REGRESSION: metadata row cues split a multiline course title from the immediately following course", () => {
+    // This reproduces the real TTU failure mode:
+    //
+    //   مختبر قواعد البيانات
+    //   المهيكلة
+    //   تصور البيانات
+    //
+    // The vertical gaps are intentionally tiny, so the old gap-only algorithm
+    // would merge all three visual lines into a single course anchor.
+    const c1Line1a = makeWord("مختبر", 800, 100, 850, 116);
+    const c1Line1b = makeWord("قواعد", 855, 100, 900, 116);
+    const c1Line1c = makeWord("البيانات", 905, 100, 970, 116);
+    const c1Line2 = makeWord("المهيكلة", 835, 118, 930, 134);
+
+    const c2a = makeWord("تصور", 815, 136, 860, 152);
+    const c2b = makeWord("البيانات", 865, 136, 940, 152);
+
+    // Corroborated metadata cues: section + credit-hours each provide one
+    // single-value anchor per logical course row.
+    const row1Section = makeWord("1", 650, 112, 665, 128);
+    const row1Credits = makeWord("3", 500, 112, 515, 128);
+    const row2Section = makeWord("2", 650, 140, 665, 156);
+    const row2Credits = makeWord("3", 500, 140, 515, 156);
+
+    const bodyWords = [
+      c1Line1a,
+      c1Line1b,
+      c1Line1c,
+      c1Line2,
+      c2a,
+      c2b,
+      row1Section,
+      row1Credits,
+      row2Section,
+      row2Credits,
+    ];
+
+    const result = detectRowBands(bodyWords, COLUMNS, 60, 24);
+
+    expect(result.rowBands).toHaveLength(2);
+
+    // Boundary must fall between the two logical courses even though the
+    // printed course-name lines are only 2px apart.
+    expect(result.rowBands[0].yBottom).toBeGreaterThanOrEqual(134);
+    expect(result.rowBands[0].yBottom).toBeLessThan(136 + 8);
+    expect(result.rowBands[1].yTop).toBe(result.rowBands[0].yBottom);
+  });
+
+  it("keeps two visual title lines in one course when metadata places both inside the same row", () => {
+    const c1Line1 = makeWord("مختبر قواعد البيانات", 800, 100, 970, 116);
+    const c1Line2 = makeWord("المهيكلة", 835, 118, 930, 134);
+    const c2 = makeWord("التعلم الآلي", 820, 180, 930, 196);
+
+    const row1Section = makeWord("1", 650, 112, 665, 128);
+    const row1Credits = makeWord("3", 500, 112, 515, 128);
+    const row2Section = makeWord("2", 650, 184, 665, 200);
+    const row2Credits = makeWord("3", 500, 184, 515, 200);
+
+    const result = detectRowBands(
+      [
+        c1Line1,
+        c1Line2,
+        c2,
+        row1Section,
+        row1Credits,
+        row2Section,
+        row2Credits,
+      ],
+      COLUMNS,
+      60,
+      24
+    );
+
+    expect(result.rowBands).toHaveLength(2);
+    expect(result.rowBands[0].yBottom).toBeGreaterThan(134);
+    expect(result.rowBands[0].yBottom).toBeLessThan(180);
+  });
+
 });
