@@ -197,7 +197,7 @@ flowchart TD
 | AI | Google Gemini API |
 | PWA | Web App Manifest + Service Worker |
 | Testing | Vitest + Playwright |
-| Analytics | Vercel Web Analytics |
+| Analytics | Vercel Web Analytics + anonymous PostHog product events |
 | Performance | Vercel Speed Insights |
 | Hosting | Vercel |
 | Package manager | pnpm |
@@ -280,6 +280,8 @@ http://localhost:3000
 | `AI_GLOBAL_RATE_LIMIT_WINDOW_MS` | Burst guard time window |
 | `AI_RESULT_CACHE_TTL_MS` | Exact-file result cache lifetime |
 | `AI_RESULT_CACHE_MAX_ENTRIES` | Maximum warm-memory cached results |
+| `NEXT_PUBLIC_POSTHOG_KEY` | Optional publishable PostHog project token for anonymous product events |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog ingestion host; defaults to `https://us.i.posthog.com` |
 
 **Never commit real API keys or `.env` files.**
 
@@ -308,6 +310,8 @@ The production application is deployed on Vercel:
 **https://murattab-pi.vercel.app**
 
 The application uses Vercel Web Analytics and Speed Insights for aggregate usage/performance measurement.
+
+When `NEXT_PUBLIC_POSTHOG_KEY` is configured, Murattab also sends a deliberately small set of anonymous product events for the Smart Import funnel. The tracker uses a random local identifier and does **not** send names, university IDs, course names, rooms, timetable contents, or uploaded files. Session replay and automatic interaction capture are not enabled.
 
 ---
 
