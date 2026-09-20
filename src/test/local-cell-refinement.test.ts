@@ -276,7 +276,7 @@ describe("Phase 5B — Targeted Cell-Level OCR Refinement", () => {
     expect(parsed.issues.some((i) => i.code === "DAY_UNRESOLVED")).toBe(true);
 
     const status = determineFieldStatus("meeting", "حت 08:30 - 10:00");
-    expect(status).toBe("PARTIALLY_RESOLVED");
+    expect(status).toBe("UNRESOLVED");
     expect(status).not.toBe("RESOLVED_FROM_PIXELS");
   });
 
