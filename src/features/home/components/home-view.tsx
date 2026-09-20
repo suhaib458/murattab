@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
+import { getNextAcademicSession, getSessionsOnAcademicDate } from "@/domain/calendar";
 import {
   calculateFreeTimeSlots,
   dayNames,
@@ -13,7 +14,6 @@ import {
   getFreeTimeIntelligence,
   getMinutesRemainingInSession,
   getMinutesUntilSession,
-  getNextScheduledSession,
   getUpcomingSession,
   sortSessions
 } from "@/domain/schedule";
@@ -32,8 +32,15 @@ export function HomeView({ data }: { data: AppSnapshot }) {
 
   const todayJsDay = now.getDay();
   const todayCode = getDayCodeFromJsDay(todayJsDay);
-  const todaySessions = todayCode ? sortSessions(data.sessions.filter((s) => s.day === todayCode)) : [];
   const nowTime = now.toTimeString().slice(0, 5);
+  const todayIso = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+  const todaySessions = sortSessions(
+    getSessionsOnAcademicDate(data.sessions, data.courses, data.terms, todayIso)
+  );
 
   // Today session classification
   const currentSession = getCurrentSession(todaySessions, nowTime);
@@ -43,9 +50,26 @@ export function HomeView({ data }: { data: AppSnapshot }) {
   const allEnded = todaySessions.length > 0 && !activeSession;
   const hasNoSchedule = data.sessions.length === 0;
 
-  // Next scheduled session across upcoming teaching days (skips Friday, wraps around week)
-  const nextScheduled = getNextScheduledSession(data.sessions, todayJsDay, nowTime);
-  const nextCourse = nextScheduled ? data.courses.find((c) => c.id === nextScheduled.session.courseId) : null;
+  // Next concrete class occurrence across real calendar dates.
+  // This is bounded by the course's academic term and never wraps forever.
+  const nextAcademic = getNextAcademicSession(
+    data.sessions,
+    data.courses,
+    data.terms,
+    now,
+    nowTime
+  );
+  const nextScheduled = nextAcademic
+    ? {
+        session: nextAcademic.session,
+        dayCode: nextAcademic.session.day,
+        dayName: dayNames[nextAcademic.session.day],
+        daysAhead: nextAcademic.daysAhead
+      }
+    : null;
+  const nextCourse = nextScheduled
+    ? data.courses.find((c) => c.id === nextScheduled.session.courseId)
+    : null;
 
   // Daily summary metrics
   const remainingTodaySessions = todaySessions.filter((s) => s.endsAt > nowTime);
@@ -60,8 +84,15 @@ export function HomeView({ data }: { data: AppSnapshot }) {
     (todaySessions.length === 0 || allEnded) &&
     nextScheduled !== null &&
     nextScheduled.daysAhead > 0;
-  const nextDaySessions = shouldShowNextDay
-    ? sortSessions(data.sessions.filter((s) => s.day === nextScheduled.dayCode))
+  const nextDaySessions = shouldShowNextDay && nextAcademic
+    ? sortSessions(
+        getSessionsOnAcademicDate(
+          data.sessions,
+          data.courses,
+          data.terms,
+          nextAcademic.date
+        )
+      )
     : [];
 
   // Rest of today: exclude classes that have completely ended, and exclude current active session
