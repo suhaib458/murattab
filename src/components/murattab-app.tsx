@@ -311,6 +311,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   return (
     <>
+      <div className="campus-background" aria-hidden="true" />
       <main className="app">
         <header className="topbar">
           <Link href="/" className="brand" aria-label="مرتب، الصفحة الرئيسية">
