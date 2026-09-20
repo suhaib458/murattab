@@ -159,6 +159,10 @@ export class LocalOcrEngine {
         gzip: true,
       });
 
+      // PSM 4 (SINGLE_COLUMN): Assumes a single vertical column of text of variable sizes,
+      // which strictly matches schedule tables and guarantees sequential top-to-bottom row recognition.
+      await worker.setParameters({ tessedit_pageseg_mode: "4" as any });
+
       if (this.isDisposed) {
         await worker.terminate().catch(() => {});
         throw new OcrError("OCR_INITIALIZATION_FAILED", "Engine was disposed during initialization.");

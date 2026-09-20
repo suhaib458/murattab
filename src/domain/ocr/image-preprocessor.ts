@@ -20,14 +20,23 @@ import { OcrError, type PreprocessedImage } from "./types";
 // out-of-memory on low-end phones (especially iOS Safari, which can abort
 // pages with large canvases).
 
-/** Minimum width (px) at which Tesseract produces reliable results. */
-export const MIN_USEFUL_WIDTH = 800;
+/** Minimum width threshold (px) below which an image is considered a small screenshot in need of upscale. */
+export const SMALL_IMAGE_WIDTH_THRESHOLD = 1400;
+
+/** Target width (px) for small schedule screenshots to ensure legible Arabic glyph height (~25–35 px). */
+export const TARGET_SCHEDULE_WIDTH = 1500;
+
+/** Backward-compatible alias for previous constant. */
+export const MIN_USEFUL_WIDTH = TARGET_SCHEDULE_WIDTH;
 
 /** No single dimension should exceed this to avoid GPU texture limits. */
 export const MAX_DIMENSION = 4096;
 
 /** Total pixel budget — ~16.7 MP.  iOS Safari is safe up to ~16.7 MP. */
 export const MAX_TOTAL_PIXELS = MAX_DIMENSION * MAX_DIMENSION;
+
+/** Threshold for high-resolution images (~1.5 MP) that do not require upscaling. */
+export const LARGE_IMAGE_PIXEL_THRESHOLD = 1_500_000;
 
 /** Never downscale — preserve everything the user gave us. */
 const MIN_SCALE = 1.0;
@@ -41,29 +50,33 @@ const MAX_SCALE = 3.0;
  * Compute the deterministic scale factor for an image.
  *
  * Rules:
- *   1. If width ≥ MIN_USEFUL_WIDTH, keep scale = 1 (no upscale).
- *   2. Otherwise, target = MIN_USEFUL_WIDTH / width, clamped to [1, 3].
- *   3. Ensure neither dimension exceeds MAX_DIMENSION.
- *   4. Ensure total pixels ≤ MAX_TOTAL_PIXELS.
+ *   1. If width ≥ SMALL_IMAGE_WIDTH_THRESHOLD (1400px) or total pixels ≥ LARGE_IMAGE_PIXEL_THRESHOLD (1.5 MP),
+ *      keep scale = 1.0 (already high resolution, avoid aggressive or unnecessary upscale).
+ *   2. For small screenshots (e.g. 669×276), target TARGET_SCHEDULE_WIDTH (1500px), clamped to [1.0, 3.0].
+ *   3. Ensure neither dimension exceeds MAX_DIMENSION (4096).
+ *   4. Ensure total pixels ≤ MAX_TOTAL_PIXELS (16.7 MP).
  *
  * @returns scale factor ≥ 1
  */
 export function computeScaleFactor(width: number, height: number): number {
   if (width <= 0 || height <= 0) return MIN_SCALE;
 
-  // Step 1 — target scale
-  let scale = width >= MIN_USEFUL_WIDTH
-    ? MIN_SCALE
-    : Math.min(MIN_USEFUL_WIDTH / width, MAX_SCALE);
+  // Rule 1 — If already high-resolution, do not upscale
+  if (width >= SMALL_IMAGE_WIDTH_THRESHOLD || width * height >= LARGE_IMAGE_PIXEL_THRESHOLD) {
+    return MIN_SCALE;
+  }
 
-  // Step 2 — clamp by max dimension
+  // Rule 2 — Target 1400–1600 px (specifically 1500 px) for small schedule screenshots
+  let scale = Math.min(TARGET_SCHEDULE_WIDTH / width, MAX_SCALE);
+
+  // Rule 3 — clamp by max dimension
   const maxDimScale = Math.min(
     MAX_DIMENSION / width,
     MAX_DIMENSION / height
   );
   scale = Math.min(scale, maxDimScale);
 
-  // Step 3 — clamp by pixel budget
+  // Rule 4 — clamp by pixel budget
   const pixelScale = Math.sqrt(MAX_TOTAL_PIXELS / (width * height));
   scale = Math.min(scale, pixelScale);
 
@@ -125,6 +138,149 @@ export function enhanceContrast(data: Uint8ClampedArray): void {
     const v = data[i];
     const stretched = Math.round(((Math.min(Math.max(v, low), high) - low) / range) * 255);
     data[i] = data[i + 1] = data[i + 2] = stretched;
+  }
+}
+
+// ── Dark header polarity normalization & background cleaning ───────────
+
+export interface DarkHeaderBand {
+  yStart: number;
+  yEnd: number;
+  height: number;
+  meanLuminance: number;
+  darkCoverage: number;
+}
+
+/**
+ * Detect a dark horizontal header band near the top of the image.
+ *
+ * Requirements (conservative, evidence-based):
+ * 1. Inspect only the upper table/header region (y <= 35% of height, max 300px).
+ * 2. Require low mean luminance (< 85 out of 255) and high dark coverage (> 60% of pixels luma < 75).
+ * 3. Horizontal dark span must cover at least 70% of image width (rules out narrow icons/buttons).
+ * 4. Band height must be between min(12px, 4% of height) and 25% of height.
+ * 5. Band must start near top (yStart <= 20% of height).
+ */
+export function detectDarkHeaderBand(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): DarkHeaderBand | null {
+  if (width <= 0 || height <= 0 || data.length < width * height * 4) {
+    return null;
+  }
+
+  const maxScanY = Math.min(Math.round(height * 0.35), 300);
+  let darkStart = -1;
+  let darkEnd = -1;
+  let totalLumaInBand = 0;
+  let totalDarkPixelsInBand = 0;
+  let totalRowsInBand = 0;
+
+  for (let y = 0; y < maxScanY; y++) {
+    let rowLumaSum = 0;
+    let rowDarkCount = 0;
+    let minDarkX = width;
+    let maxDarkX = -1;
+
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const luma = data[idx]; // data is greyscale
+      rowLumaSum += luma;
+      if (luma < 75) {
+        rowDarkCount++;
+        if (x < minDarkX) minDarkX = x;
+        if (x > maxDarkX) maxDarkX = x;
+      }
+    }
+
+    const meanLuma = rowLumaSum / width;
+    const darkRatio = rowDarkCount / width;
+    const horizontalSpan = maxDarkX >= minDarkX ? (maxDarkX - minDarkX + 1) / width : 0;
+
+    // A row qualifies as a dark table header row only if it has low mean luminance,
+    // high dark coverage, and wide horizontal span across the page.
+    const isDarkRow = meanLuma < 85 && darkRatio > 0.60 && horizontalSpan >= 0.70;
+
+    if (isDarkRow) {
+      if (darkStart === -1) darkStart = y;
+      darkEnd = y;
+      totalLumaInBand += meanLuma;
+      totalDarkPixelsInBand += rowDarkCount;
+      totalRowsInBand++;
+    } else if (darkStart !== -1) {
+      // Tolerate a small 1-3 row dip for internal text or thin horizontal divider within the header
+      if (y - darkEnd > 3) {
+        break;
+      }
+    }
+  }
+
+  if (darkStart === -1 || totalRowsInBand === 0) {
+    return null;
+  }
+
+  const bandHeight = darkEnd - darkStart + 1;
+  const minHeight = Math.max(12, Math.round(height * 0.04));
+  const maxHeight = Math.round(height * 0.25);
+  const maxStartOffset = Math.round(height * 0.20);
+
+  // Conservative safeguards
+  if (
+    bandHeight < minHeight ||
+    bandHeight > maxHeight ||
+    darkStart > maxStartOffset
+  ) {
+    return null;
+  }
+
+  const meanLuminance = totalLumaInBand / totalRowsInBand;
+  const darkCoverage = totalDarkPixelsInBand / (totalRowsInBand * width);
+
+  return {
+    yStart: darkStart,
+    yEnd: darkEnd,
+    height: bandHeight,
+    meanLuminance,
+    darkCoverage,
+  };
+}
+
+/**
+ * Invert ONLY the pixels of a detected dark header band.
+ * Returns the detected band if inverted, or null if no band qualified.
+ */
+export function normalizeDarkHeaderBand(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): DarkHeaderBand | null {
+  const band = detectDarkHeaderBand(data, width, height);
+  if (!band) return null;
+
+  for (let y = band.yStart; y <= band.yEnd; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      data[idx] = 255 - data[idx];
+      data[idx + 1] = 255 - data[idx + 1];
+      data[idx + 2] = 255 - data[idx + 2];
+    }
+  }
+
+  return band;
+}
+
+/**
+ * Flatten light background (e.g. alternating light-gray table row backgrounds) to pure white.
+ * TTU schedules use alternating #e0e0e0 (luma ~220) row stripes.
+ * Mapping any pixel with luma > 185 to 255 produces a clean uniform background,
+ * preventing Tesseract's binarizer from dropping alternating rows.
+ */
+export function flattenLightBackground(data: Uint8ClampedArray): void {
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] > 185) {
+      data[i] = data[i + 1] = data[i + 2] = 255;
+    }
   }
 }
 
@@ -242,6 +398,8 @@ export async function preprocessImage(input: Blob): Promise<PreprocessedImage> {
 
     const imageData = ctx.getImageData(0, 0, targetW, targetH);
     toGreyscale(imageData.data);
+    normalizeDarkHeaderBand(imageData.data, targetW, targetH);
+    flattenLightBackground(imageData.data);
     enhanceContrast(imageData.data);
     ctx.putImageData(imageData, 0, 0);
 
@@ -263,6 +421,8 @@ export async function preprocessImage(input: Blob): Promise<PreprocessedImage> {
 
     const imageData = ctx.getImageData(0, 0, targetW, targetH);
     toGreyscale(imageData.data);
+    normalizeDarkHeaderBand(imageData.data, targetW, targetH);
+    flattenLightBackground(imageData.data);
     enhanceContrast(imageData.data);
     ctx.putImageData(imageData, 0, 0);
 
