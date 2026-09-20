@@ -174,53 +174,7 @@ p { line-height: 1.65; }
 /* -------------------------------------------------------------------------
    4. Layout shell
    ------------------------------------------------------------------------- */
-.campus-background {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  user-select: none;
-  background-image: url("/branding/ttu-campus-background.webp");
-  background-repeat: no-repeat;
-  background-position: center 48%;
-  background-size: cover;
-
-  /* Deliberately visible, but still secondary to the schedule content.
-     The warmer/desaturated treatment follows the soft campus-photo reference
-     instead of making the image look like a full-strength wallpaper. */
-  opacity: 0.36;
-  filter: grayscale(0.18) saturate(0.62) sepia(0.28) brightness(0.93) contrast(0.88);
-  transform: scale(1.01);
-  transform-origin: center;
-
-  /* Reference look: the campus should be clearly visible in the upper
-     experience, then dissolve gently into the ivory background below. */
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.96) 0%,
-    #000 44%,
-    rgba(0, 0, 0, 0.78) 66%,
-    rgba(0, 0, 0, 0.32) 88%,
-    rgba(0, 0, 0, 0.12) 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.96) 0%,
-    #000 44%,
-    rgba(0, 0, 0, 0.78) 66%,
-    rgba(0, 0, 0, 0.32) 88%,
-    rgba(0, 0, 0, 0.12) 100%
-  );
-}
-
-[data-theme="dark"] .campus-background {
-  opacity: 0.20;
-  filter: grayscale(0.22) saturate(0.46) sepia(0.12) brightness(0.58) contrast(0.94);
-}
-
 .app {
-  position: relative;
-  z-index: 1;
   max-width: var(--container-max);
   margin: auto;
   min-height: 100vh;
@@ -228,21 +182,8 @@ p { line-height: 1.65; }
 }
 
 @media (max-width: 700px) {
-  .campus-background {
-    background-position: 52% 34%;
-    opacity: 0.32;
-    filter: grayscale(0.20) saturate(0.58) sepia(0.30) brightness(0.94) contrast(0.88);
-    transform: scale(1.015);
-  }
-
-  [data-theme="dark"] .campus-background {
-    opacity: 0.18;
-    filter: grayscale(0.24) saturate(0.42) sepia(0.12) brightness(0.56) contrast(0.94);
-  }
-
   .app { padding: calc(16px + var(--safe-top)) 14px var(--bottom-nav-extra); }
 }
-
 /* -------------------------------------------------------------------------
    5. Top Bar / Brand
    ------------------------------------------------------------------------- */
