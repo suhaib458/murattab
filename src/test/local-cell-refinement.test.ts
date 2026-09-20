@@ -266,15 +266,15 @@ describe("Phase 5B — Targeted Cell-Level OCR Refinement", () => {
     expect(score).toBeGreaterThan(20);
   });
 
-  // ── K. Non-guessing: "حت 08:30 - 10:00" does NOT become ["ح", "ث"] ───
-  it("K. non-guessing: 'حت 08:30 - 10:00' does NOT silently become ['ح', 'ث']", () => {
+  // ── K. Non-guessing: mixed token "حت" contributes ZERO inferred days ──
+  it("K. non-guessing: mixed token 'حت' is ambiguous and does not infer Sunday or Tuesday", () => {
     const parsed = parseTtuDayCodes("حت 08:30 - 10:00", 0.8);
-    // 'ت' is NOT canonical TTU day code. Only 'ح' is valid.
-    expect(parsed.days).toEqual(["ح"]);
+    expect(parsed.days).toEqual([]);
+    expect(parsed.days).not.toContain("ح");
     expect(parsed.days).not.toContain("ث");
     expect(parsed.issues.some((i) => i.code === "DAY_TOKEN_AMBIGUOUS")).toBe(true);
+    expect(parsed.issues.some((i) => i.code === "DAY_UNRESOLVED")).toBe(true);
 
-    // Scoring also strictly recognizes only 1 canonical day and penalizes 'ت'
     const status = determineFieldStatus("meeting", "حت 08:30 - 10:00");
     expect(status).toBe("PARTIALLY_RESOLVED");
     expect(status).not.toBe("RESOLVED_FROM_PIXELS");
@@ -428,12 +428,12 @@ describe("Phase 5B — Targeted Cell-Level OCR Refinement", () => {
     expect(stripped).toBe("تصور البيانات");
   });
 
-  // ── R. Network course: 'حت' remains partially resolved and does NOT become 'ح ث' ──
-  it("R. network course: 'حت 08:30 - 10:00' does NOT invent Tuesday ('ث')", () => {
+  // ── R. Network course: corrupted compact token stays fully unresolved ─
+  it("R. network course: 'حت 08:30 - 10:00' does not invent any day", () => {
     const dayResult = parseTtuDayCodes("حت 08:30 - 10:00", 0.9);
-    expect(dayResult.days).toContain("ح");
-    expect(dayResult.days).not.toContain("ث");
+    expect(dayResult.days).toEqual([]);
     expect(dayResult.issues.some((iss) => iss.code === "DAY_TOKEN_AMBIGUOUS")).toBe(true);
+    expect(dayResult.issues.some((iss) => iss.code === "DAY_UNRESOLVED")).toBe(true);
   });
 
   // ── S. Noisy room candidate ('متي الحاسوب 167 4') does NOT win over stronger baseline ──
