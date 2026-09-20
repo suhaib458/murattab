@@ -2,39 +2,88 @@
  * Murattab TTU Schedule Room Parser.
  *
  * Deterministically parses, preserves, and optionally expands room locations
- * using verified TTU building rules.
+ * using verified TTU room grammar.
  *
- * Rules:
- * - Always preserves roomRaw from geometry.
- * - Reuses verified expandRoom() for "م", "هـ/ه", "ع" buildings.
- * - Reuses getIctLabLabel() for verified ICT computer lab patterns (e.g. ICT - 4).
- * - Leaves unexpanded valid rooms (e.g. DS-ICT 2, DS-ICT 3) as valid raw evidence
- *   without emitting ROOM_UNRESOLVED.
- * - Emits ROOM_MISSING only when no room text exists.
- * - Emits ROOM_UNRESOLVED only when room text is corrupted noise/punctuation.
+ * Non-guessing invariant:
+ * - A room is considered resolved only when its ENTIRE text matches a verified
+ *   TTU room form.
+ * - Prefix/suffix garbage is never ignored.
+ * - Corrupted OCR such as "مختبر الحاسوب 5 161 ف",
+ *   "acd محوسبة 3 DS-ICT", or "قاعة محوسبة 3 05-167" remains unresolved.
  */
 
 import { expandRoom, getIctLabLabel } from "@/domain/schedule";
 import type { TtuSemanticIssue } from "./types";
 
 export interface RoomParseResult {
-  /** Preserved raw room string. */
   roomRaw: string;
-  /** Expanded room label if recognized by TTU rules, else undefined. */
   roomExpanded?: string;
-  /** Room extraction confidence bounded by source geometry confidence (0–1). */
   confidence: number;
-  /** Diagnostic issues encountered. */
   issues: TtuSemanticIssue[];
+}
+
+function normalizeRoomText(rawText: string | undefined): string {
+  return (rawText ?? "")
+    .trim()
+    .replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function isOnlineRoom(clean: string): boolean {
+  return /^(Online|أونلاين|عبر الإنترنت)$/i.test(clean);
+}
+
+function isBuildingCodeRoom(clean: string): boolean {
+  return (
+    /^(?:م|ع|هـ|ه)\s*\d{1,4}$/.test(clean) ||
+    /^\d{1,4}\s*(?:م|ع|هـ|ه)$/.test(clean)
+  );
+}
+
+function isNamedHallRoom(clean: string): boolean {
+  return /^(?:قاعة|مدرج)\s+\d{1,4}$/.test(clean);
+}
+
+function isComputerizedHallRoom(clean: string): boolean {
+  return /^قاعة\s+محوسبة\s+\d+(?:\s+DS-ICT(?:\s*[-–—]?\s*\d+)?)?$/i.test(clean);
+}
+
+function isDsIctRoom(clean: string): boolean {
+  return /^DS-ICT\s*[-–—]?\s*\d+$/i.test(clean);
+}
+
+function isPlainIctLab(clean: string): boolean {
+  return /^ICT\s*[-–—]?\s*\d+$/i.test(clean);
+}
+
+function isExplicitIctLab(clean: string): boolean {
+  return (
+    /^مختبر\s+الحاسوب\s+ICT\s*[-–—]?\s*\d+$/i.test(clean) ||
+    /^مختبر\s+الحاسوب\s+\d+\s+ICT$/i.test(clean)
+  );
+}
+
+/**
+ * Single strict verifier used by semantic parsing and OCR refinement.
+ * It validates the complete room string; partial matches are not enough.
+ */
+export function isVerifiedTtuRoomText(rawText: string | undefined): boolean {
+  const clean = normalizeRoomText(rawText);
+  if (!clean) return false;
+
+  return (
+    isOnlineRoom(clean) ||
+    isBuildingCodeRoom(clean) ||
+    isNamedHallRoom(clean) ||
+    isComputerizedHallRoom(clean) ||
+    isDsIctRoom(clean) ||
+    isPlainIctLab(clean) ||
+    isExplicitIctLab(clean)
+  );
 }
 
 /**
  * Parses and optionally expands a room text segment.
- *
- * @param rawText - Raw text from the room segment or cell
- * @param sourceConfidence - Bounding confidence from geometry (0–1)
- * @param sessionKind - Inferred or default session kind ("lecture" | "lab" | "unspecified")
- * @param courseName - Optional course name for diagnostic reporting
  */
 export function parseTtuRoom(
   rawText: string | undefined,
@@ -43,7 +92,7 @@ export function parseTtuRoom(
   courseName?: string
 ): RoomParseResult {
   const issues: TtuSemanticIssue[] = [];
-  const clean = (rawText ?? "").trim().replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "");
+  const clean = normalizeRoomText(rawText);
 
   if (!clean) {
     issues.push({
@@ -59,42 +108,40 @@ export function parseTtuRoom(
     };
   }
 
-  // Check if the room text is just corrupted noise/punctuation (e.g. "@", "?", "...")
-  if (/^[^a-zA-Z0-9\u0600-\u06FF]+$/.test(clean) && clean.length < 4) {
+  if (!isVerifiedTtuRoomText(clean)) {
     issues.push({
       code: "ROOM_UNRESOLVED",
-      message: `نص القاعة "${clean}" غير مقروء أو غير صالح${courseName ? ` لمادة "${courseName}"` : ""}.`,
+      message: `نص القاعة "${clean}" غير مؤكد أو يحتوي قراءة OCR غير موثوقة${courseName ? ` لمادة "${courseName}"` : ""}.`,
       severity: "warning",
       courseName
     });
     return {
       roomRaw: clean,
-      confidence: Math.min(sourceConfidence, 0.4),
+      confidence: Math.min(sourceConfidence, 0.35),
       issues
     };
   }
 
-  // 1. Check verified expandRoom helper from domain
-  const expanded = expandRoom(clean);
-  let roomExpanded: string | undefined = expanded.label !== clean ? expanded.label : undefined;
+  let roomExpanded: string | undefined;
 
-  // 2. Check verified ICT lab label if kind is lab or if matches plain ICT lab
-  if (!roomExpanded) {
-    const ictLabel = getIctLabLabel(clean, "lab");
-    if (ictLabel) {
-      roomExpanded = ictLabel;
-    }
+  if (isOnlineRoom(clean)) {
+    roomExpanded = "عبر الإنترنت";
+  } else if (isBuildingCodeRoom(clean)) {
+    const expanded = expandRoom(clean);
+    roomExpanded = expanded.label !== clean ? expanded.label : undefined;
+  } else if (isPlainIctLab(clean)) {
+    roomExpanded = getIctLabLabel(clean, "lab") ?? undefined;
+  } else if (isExplicitIctLab(clean)) {
+    // The raw string is already the human-readable official lab form.
+    roomExpanded = undefined;
+  } else if (sessionKind === "lab" && /^ICT/i.test(clean)) {
+    roomExpanded = getIctLabLabel(clean, "lab") ?? undefined;
   }
-
-  // Confidence is bounded by source geometry confidence
-  const confidence = roomExpanded
-    ? Math.min(sourceConfidence, 0.95)
-    : Math.min(sourceConfidence, 0.88);
 
   return {
     roomRaw: clean,
     roomExpanded,
-    confidence,
+    confidence: Math.min(sourceConfidence, 0.95),
     issues
   };
 }
