@@ -36,8 +36,8 @@ const OCR_WORKER_PATH = "/ocr/worker.min.js";
 const OCR_CORE_PATH = "/ocr/core";
 const OCR_LANG_PATH = "/ocr/lang";
 
-/** Languages loaded: Arabic + English for TTU schedules (explicit array). */
-const OCR_LANGUAGES: string[] = ["ara", "eng"];
+/** Languages loaded: English + Arabic for TTU schedules (explicit array, eng first ensures correct LTR digit/time tokenization). */
+const OCR_LANGUAGES: string[] = ["eng", "ara"];
 
 // ── Result mapping ─────────────────────────────────────────────────────
 
@@ -123,12 +123,34 @@ export function mapTesseractResult(
   };
 }
 
-// ── Engine class ───────────────────────────────────────────────────────
+// ── Engine options & class ─────────────────────────────────────────────
+
+export interface OcrRecognizeOptions {
+  /** Temporary Tesseract Page Segmentation Mode (e.g. '6', '11', '13', '7', '4'). Defaults to '4'. */
+  pageSegMode?: string | number;
+  /** When true, bypasses full-image preprocessing (for custom-preprocessed crops). */
+  skipPreprocessing?: boolean;
+}
 
 export class LocalOcrEngine {
   private worker: Tesseract.Worker | null = null;
   private initPromise: Promise<Tesseract.Worker> | null = null;
   private isDisposed = false;
+  private isProcessing = false;
+  private queue: Array<() => void> = [];
+
+  private async acquireLock(): Promise<void> {
+    if (this.isProcessing) {
+      await new Promise<void>((resolve) => this.queue.push(resolve));
+    }
+    this.isProcessing = true;
+  }
+
+  private releaseLock(): void {
+    this.isProcessing = false;
+    const next = this.queue.shift();
+    if (next) next();
+  }
 
   /**
    * Lazily initialize the Tesseract worker.
@@ -183,49 +205,97 @@ export class LocalOcrEngine {
   }
 
   /**
-   * Recognize text in an image.
+   * Recognize text in an image or cell crop.
    *
    * @param input - Image as a File or Blob (JPEG, PNG, WebP).
+   * @param options - Optional recognition parameters (PSM override, preprocessed flag).
    * @returns Normalized OCR result with text, confidence, and spatial data.
    *
    * @throws {OcrError} with appropriate code on failure.
    */
-  async recognizeImage(input: Blob | File): Promise<OcrImageResult> {
+  async recognizeImage(
+    input: Blob | File,
+    options?: OcrRecognizeOptions
+  ): Promise<OcrImageResult> {
     if (!input || input.size === 0) {
       throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Empty image input.");
     }
 
-    // Preprocess: upscale, greyscale, contrast
-    let preprocessed: Awaited<ReturnType<typeof preprocessImage>>;
+    await this.acquireLock();
     try {
-      preprocessed = await preprocessImage(input);
-    } catch (err) {
-      if (err instanceof OcrError) throw err;
-      throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Image preprocessing failed.", { cause: err });
-    }
+      // Preprocess if needed
+      let imageBlob: Blob = input;
+      let origW = 0;
+      let origH = 0;
+      let procW = 0;
+      let procH = 0;
 
-    // Get or init worker
-    const worker = await this.getWorker();
+      if (options?.skipPreprocessing) {
+        imageBlob = input;
+        // Obtain dimensions via createImageBitmap or mock
+        if (typeof createImageBitmap !== "undefined") {
+          try {
+            const bmp = await createImageBitmap(input);
+            origW = procW = bmp.width;
+            origH = procH = bmp.height;
+            bmp.close?.();
+          } catch {
+            origW = procW = 100;
+            origH = procH = 100;
+          }
+        } else {
+          origW = procW = 100;
+          origH = procH = 100;
+        }
+      } else {
+        let preprocessed: Awaited<ReturnType<typeof preprocessImage>>;
+        try {
+          preprocessed = await preprocessImage(input);
+        } catch (err) {
+          if (err instanceof OcrError) throw err;
+          throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Image preprocessing failed.", { cause: err });
+        }
+        imageBlob = preprocessed.blob;
+        origW = preprocessed.originalWidth;
+        origH = preprocessed.originalHeight;
+        procW = preprocessed.processedWidth;
+        procH = preprocessed.processedHeight;
+      }
 
-    // Recognize with structured output (blocks → lines → words)
-    let result: Tesseract.RecognizeResult;
-    try {
-      result = await worker.recognize(preprocessed.blob, {}, { blocks: true, text: true });
-    } catch (err) {
-      throw new OcrError(
-        "OCR_RECOGNITION_FAILED",
-        "OCR recognition failed.",
-        { cause: err }
+      // Get or init worker
+      const worker = await this.getWorker();
+
+      // Parameter isolation: apply custom PSM if specified and safely restore default PSM 4
+      const requestedPsm = options?.pageSegMode != null ? String(options.pageSegMode) : null;
+      if (requestedPsm && requestedPsm !== "4") {
+        await worker.setParameters({ tessedit_pageseg_mode: requestedPsm as any });
+      }
+
+      let result: Tesseract.RecognizeResult;
+      try {
+        result = await worker.recognize(imageBlob, {}, { blocks: true, text: true });
+      } catch (err) {
+        throw new OcrError(
+          "OCR_RECOGNITION_FAILED",
+          "OCR recognition failed.",
+          { cause: err }
+        );
+      } finally {
+        if (requestedPsm && requestedPsm !== "4") {
+          await worker.setParameters({ tessedit_pageseg_mode: "4" as any }).catch(() => {});
+        }
+      }
+
+      return mapTesseractResult(
+        result.data,
+        origW,
+        origH,
+        procW,
+        procH
       );
+    } finally {
+      this.releaseLock();
     }
-
-    return mapTesseractResult(
-      result.data,
-      preprocessed.originalWidth,
-      preprocessed.originalHeight,
-      preprocessed.processedWidth,
-      preprocessed.processedHeight
-    );
   }
 
   /**

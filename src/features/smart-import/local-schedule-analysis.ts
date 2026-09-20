@@ -43,6 +43,7 @@ export const LOCAL_ANALYSIS_STAGES = {
   PREPARING: "تجهيز الصورة محليًا…",
   RECOGNIZING: "قراءة النص من الجدول على جهازك…",
   GEOMETRY: "تحديد صفوف وأعمدة الجدول…",
+  REFINING: "تحسين قراءة بعض الخلايا…",
   SEMANTICS: "تحليل الأيام والمواعيد والقاعات…",
   FINALIZING: "تجهيز النتائج للمراجعة…"
 } as const;
@@ -81,9 +82,20 @@ export async function analyzeScheduleImageLocally(
     );
   }
 
-  // Stage 4: Semantic Parsing
+  // Baseline Semantic Parsing to identify problematic cells
+  const baselineSemantics = parseTtuScheduleSemantics(geometryResult);
+
+  // Stage 4: Targeted Cell Refinement (Phase 5B)
+  const { refineTableCells } = await import("./local-cell-refinement");
+  const { refinedGeometry } = await refineTableCells(file, geometryResult, engine, {
+    onProgress,
+    signal: options?.signal,
+    baselineSemantics,
+  });
+
+  // Stage 5: Final Semantic Parsing on refined geometry
   onProgress?.(LOCAL_ANALYSIS_STAGES.SEMANTICS);
-  const semanticResult = parseTtuScheduleSemantics(geometryResult);
+  const semanticResult = parseTtuScheduleSemantics(refinedGeometry);
 
   if (!semanticResult.courses || semanticResult.courses.length === 0) {
     throw new LocalAnalysisError(
@@ -92,14 +104,14 @@ export async function analyzeScheduleImageLocally(
     );
   }
 
-  // Stage 5: Adaptation & Geometry Issue Preservation
+  // Stage 6: Adaptation & Geometry Issue Preservation
   onProgress?.(LOCAL_ANALYSIS_STAGES.FINALIZING);
   const extractionResult = toScheduleExtractionResult(semanticResult);
 
   // Merge Phase 2 geometry issues into draft issues without duplicates
   const existingMessages = new Set(extractionResult.draft.issues.map((i) => i.message));
 
-  for (const geoIssue of geometryResult.issues) {
+  for (const geoIssue of refinedGeometry.issues) {
     if (!existingMessages.has(geoIssue.message)) {
       existingMessages.add(geoIssue.message);
       const mappedIssue: ExtractionIssue = {
