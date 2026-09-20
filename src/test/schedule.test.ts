@@ -24,7 +24,7 @@ import {
   analyzeDayConflicts
 } from "@/domain/schedule";
 import { AcademicTermSchema, ClassSessionSchema } from "@/domain/models";
-import { getFirstOccurrenceDate } from "@/domain/calendar";
+import { getFirstOccurrenceDate, getNextAcademicSession, getSessionsOnAcademicDate } from "@/domain/calendar";
 import { makeBackup, readBackup } from "@/domain/backup";
 
 const courseId = "11111111-1111-4111-8111-111111111111";
@@ -417,6 +417,107 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         ];
         expect(getFreeTimeIntelligence(backToBack, "08:30").status).toBe("none");
       });
+    });
+  });
+
+
+  describe("حدود تكرار المحاضرات حسب الفصل الأكاديمي", () => {
+    const boundedTerm = {
+      id: termId,
+      name: "الفصل الدراسي الأول 2026/2027",
+      startsOn: "2026-10-04",
+      endsOn: "2027-01-07",
+      isCurrent: true
+    };
+    const boundedCourse = {
+      id: courseId,
+      termId,
+      name: "مادة تجريبية",
+      reminder: { enabled: false, minutesBefore: 0 },
+      createdAt: "2026-09-20T00:00:00.000Z"
+    };
+    const sunday = { ...baseSession, day: "ح" as const };
+    const thursday = {
+      ...baseSession,
+      id: "44444444-4444-4444-8444-444444444444",
+      day: "خ" as const,
+      startsAt: "11:30",
+      endsAt: "13:00"
+    };
+
+    it("لا يعرض أي محاضرة قبل بدء التدريس", () => {
+      expect(
+        getSessionsOnAcademicDate(
+          [sunday, thursday],
+          [boundedCourse],
+          [boundedTerm],
+          "2026-09-20"
+        )
+      ).toHaveLength(0);
+    });
+
+    it("يبدأ إظهار المحاضرات من يوم بدء التدريس نفسه", () => {
+      const result = getSessionsOnAcademicDate(
+        [sunday, thursday],
+        [boundedCourse],
+        [boundedTerm],
+        "2026-10-04"
+      );
+      expect(result.map((session) => session.day)).toEqual(["ح"]);
+    });
+
+    it("يعتبر آخر يوم تدريس ضمن الحدود بشكل شامل", () => {
+      const result = getSessionsOnAcademicDate(
+        [sunday, thursday],
+        [boundedCourse],
+        [boundedTerm],
+        "2027-01-07"
+      );
+      expect(result.map((session) => session.day)).toEqual(["خ"]);
+    });
+
+    it("لا يعرض أي محاضرة بعد آخر يوم تدريس حتى لو طابق يوم الأسبوع", () => {
+      expect(
+        getSessionsOnAcademicDate(
+          [sunday, thursday],
+          [boundedCourse],
+          [boundedTerm],
+          "2027-01-10"
+        )
+      ).toHaveLength(0);
+
+      expect(
+        getSessionsOnAcademicDate(
+          [sunday, thursday],
+          [boundedCourse],
+          [boundedTerm],
+          "2027-09-20"
+        )
+      ).toHaveLength(0);
+    });
+
+    it("لا يلتف إلى أسابيع أو سنوات لاحقة بعد انتهاء الفصل", () => {
+      const next = getNextAcademicSession(
+        [sunday, thursday],
+        [boundedCourse],
+        [boundedTerm],
+        new Date(2027, 0, 8, 8, 0, 0),
+        "08:00"
+      );
+      expect(next).toBeNull();
+    });
+
+    it("يجد أول محاضرة فعلية إذا كان التاريخ الحالي قبل بدء الفصل", () => {
+      const next = getNextAcademicSession(
+        [sunday, thursday],
+        [boundedCourse],
+        [boundedTerm],
+        new Date(2026, 8, 20, 8, 0, 0),
+        "08:00"
+      );
+      expect(next).not.toBeNull();
+      expect(next?.date).toBe("2026-10-04");
+      expect(next?.session.day).toBe("ح");
     });
   });
 

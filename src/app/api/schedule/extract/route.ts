@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { XKiroScheduleExtractor } from "@/domain/ai/xkiro-extractor";
+import { GeminiScheduleExtractor } from "@/domain/ai/gemini-extractor";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 import { ScheduleExtractionResultSchema, type ScheduleExtractor } from "@/domain/models";
 
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     }
 
     // Check API Key unless a test extractor is injected
-    if (!defaultExtractor && !process.env.XKIRO_API_KEY) {
+    if (!defaultExtractor && !process.env.GEMINI_API_KEY) {
       return NextResponse.json(
         { success: false, error: "ميزة التحليل الذكي غير مهيأة في بيئة التشغيل الحالية." },
         { status: 503 }
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
-    const extractor = defaultExtractor || new XKiroScheduleExtractor();
+    const extractor = defaultExtractor || new GeminiScheduleExtractor();
     const result = await extractor.extract({
       fileName: (file as any).name || "schedule_file",
       bytes,

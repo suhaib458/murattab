@@ -8,7 +8,7 @@ import {
   getDayCodeFromJsDay,
   sortSessions
 } from "@/domain/schedule";
-import { getEventsOnDate, ttuAcademicCalendar } from "@/domain/calendar";
+import { getEventsOnDate, getSessionsOnAcademicDate, ttuAcademicCalendar } from "@/domain/calendar";
 import { SessionList } from "@/components/shared/session-list";
 
 function toIsoDateLocal(d: Date): string {
@@ -74,11 +74,10 @@ export function CalendarView({ data }: { data: AppSnapshot }) {
   const safeSelected = Math.min(selectedDayNum, totalDaysInMonth);
   const selectedDateObj = new Date(year, month, safeSelected);
   const selectedDayCode = getDayCodeFromJsDay(selectedDateObj.getDay());
-  const selectedDaySessions = selectedDayCode
-    ? sortSessions(data.sessions.filter((session) => session.day === selectedDayCode))
-    : [];
-
   const selectedIsoDate = toIsoDateLocal(selectedDateObj);
+  const selectedDaySessions = sortSessions(
+    getSessionsOnAcademicDate(data.sessions, data.courses, data.terms, selectedIsoDate)
+  );
   const selectedEvents = getEventsOnDate(ttuAcademicCalendar.events, selectedIsoDate);
 
   const isToday = (dayNum: number) => {
@@ -116,10 +115,10 @@ export function CalendarView({ data }: { data: AppSnapshot }) {
           {daysArray.map((date) => {
             const cellDateObj = new Date(year, month, date);
             const cellDayCode = getDayCodeFromJsDay(cellDateObj.getDay());
-            const sessionCount = cellDayCode
-              ? data.sessions.filter((session) => session.day === cellDayCode).length
-              : 0;
             const cellIsoDate = toIsoDateLocal(cellDateObj);
+            const sessionCount = cellDayCode
+              ? getSessionsOnAcademicDate(data.sessions, data.courses, data.terms, cellIsoDate).length
+              : 0;
             const cellEvents = getEventsOnDate(ttuAcademicCalendar.events, cellIsoDate);
             const isSelected = safeSelected === date;
 

@@ -6,42 +6,31 @@ import { SCHEDULE_EXTRACTION_SYSTEM_PROMPT, SCHEDULE_EXTRACTION_USER_PROMPT } fr
 export interface GeminiExtractorOptions {
   apiKey?: string;
   model?: string;
-  /**
-   * Overall budget for the whole `extract()` call — covers all attempts AND
-   * the inter-attempt backoff sleeps. Default: read from `AI_PROVIDER_TIMEOUT_MS`
-   * env var; falls back to 60_000 ms.
-   *
-   * This budget is intentionally larger than any single HTTP request so the
-   * full 3-attempt retry policy can actually run. Repeated 503/429 responses
-   * on the final attempt are still classified as `GEMINI_SERVICE_UNAVAILABLE`
-   * (not `AI_PROVIDER_TIMEOUT`) so the route can return the correct status.
-   */
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   retryDelaysMs?: number[];
 }
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 export const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 export const MAX_RETRY_ATTEMPTS = 3;
-export const DEFAULT_AI_PROVIDER_TIMEOUT_MS = 60_000;
+export const DEFAULT_AI_PROVIDER_TIMEOUT_MS = 50_000;
+export const MAX_ALLOWED_TIMEOUT_MS = 58_000;
 
-/**
- * Resolve the overall extraction timeout in milliseconds.
- * Precedence: explicit option > `AI_PROVIDER_TIMEOUT_MS` env var > 60_000 default.
- *
- * Server-only: the value is read from process.env at construction time and
- * never exposed to the client bundle.
- */
 export function resolveProviderTimeoutMs(optionMs?: number): number {
   if (typeof optionMs === "number" && Number.isFinite(optionMs) && optionMs > 0) {
-    return optionMs;
+    return Math.min(optionMs, MAX_ALLOWED_TIMEOUT_MS);
   }
+
   const raw = process.env.AI_PROVIDER_TIMEOUT_MS;
   if (raw) {
-    const parsed = parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(parsed, MAX_ALLOWED_TIMEOUT_MS);
+    }
   }
+
   return DEFAULT_AI_PROVIDER_TIMEOUT_MS;
 }
 
@@ -51,30 +40,40 @@ function sleepWithSignal(ms: number, signal: AbortSignal): Promise<void> {
       reject(new Error("AI_PROVIDER_TIMEOUT"));
       return;
     }
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+
     const onAbort = () => {
       clearTimeout(timer);
       reject(new Error("AI_PROVIDER_TIMEOUT"));
     };
+
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
+function cleanModelOutput(raw: string): string {
+  const trimmed = raw.trim();
+  const fenceRegex = /^\`\`\`(?:json)?\s*([\s\S]*?)\s*\`\`\`$/i;
+  const match = fenceRegex.exec(trimmed);
+  return match ? match[1].trim() : trimmed;
+}
+
 export class GeminiScheduleExtractor implements ScheduleExtractor {
-  private apiKey: string;
+  private readonly apiKey: string;
   public readonly model: string;
-  private timeoutMs: number;
-  private fetch: typeof fetch;
-  private retryDelays: number[];
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+  private readonly retryDelays: number[];
 
   constructor(options?: GeminiExtractorOptions) {
     this.apiKey = options?.apiKey || process.env.GEMINI_API_KEY || "";
     this.model = options?.model || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
     this.timeoutMs = resolveProviderTimeoutMs(options?.timeoutMs);
-    this.fetch = options?.fetchFn || fetch;
+    this.fetchImpl = options?.fetchFn || fetch;
     this.retryDelays = options?.retryDelaysMs ?? [1000, 2000];
   }
 
@@ -88,15 +87,20 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
     }
 
     const mimeType = input.mimeType || "image/jpeg";
+    const supportedMimeTypes = new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf"
+    ]);
+
+    if (!supportedMimeTypes.has(mimeType)) {
+      throw new Error("GEMINI_INVALID_INPUT");
+    }
+
     const base64Data = Buffer.from(input.bytes).toString("base64");
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-
-    // Global AbortController — bound to the overall extraction budget
-    // (default 60s, configurable via AI_PROVIDER_TIMEOUT_MS). It must be
-    // long enough for all 3 attempts + their inter-attempt sleeps so that
-    // 3 consecutive 503s are classified as GEMINI_SERVICE_UNAVAILABLE, not
-    // as a premature AI_PROVIDER_TIMEOUT.
+    const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(this.model)}:generateContent`;
+    const deadline = Date.now() + this.timeoutMs;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -106,6 +110,7 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
       },
       contents: [
         {
+          role: "user",
           parts: [
             { text: SCHEDULE_EXTRACTION_USER_PROMPT },
             {
@@ -123,59 +128,56 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
       }
     });
 
-    // Track whether a fetch was aborted specifically by the global timeout
-    // (so a 3rd-attempt 503 doesn't get re-classified as a timeout on
-    // microtask scheduling artifacts). A timeout-induced abort is a hard
-    // signal: the operation really did exceed the budget.
-    let timedOut = false;
-    controller.signal.addEventListener("abort", () => {
-      // We only mark "timed out" once the timer has actually fired.
-      // User-initiated aborts propagate the same way; both are treated as
-      // AI_PROVIDER_TIMEOUT at the route level.
-      timedOut = true;
-    });
-
     try {
       for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-        if (controller.signal.aborted) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 1500 || controller.signal.aborted) {
           throw new Error("AI_PROVIDER_TIMEOUT");
         }
 
         if (attempt > 0) {
-          const baseDelay = this.retryDelays[attempt - 1] ?? (attempt * 1000);
+          const baseDelay = this.retryDelays[attempt - 1] ?? attempt * 1000;
           const jitter = Math.floor(Math.random() * 200);
-          await sleepWithSignal(baseDelay + jitter, controller.signal);
+          const waitMs = baseDelay + jitter;
+
+          if (Date.now() + waitMs + 1500 >= deadline) {
+            throw new Error("AI_PROVIDER_TIMEOUT");
+          }
+
+          await sleepWithSignal(waitMs, controller.signal);
         }
 
         let response: Response;
         try {
-          response = await this.fetch(endpoint, {
+          response = await this.fetchImpl(endpoint, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": this.apiKey
+            },
             signal: controller.signal,
             body: requestBody
           });
-        } catch (fetchErr: any) {
-          // AbortError (user cancel OR global timeout firing while fetch
-          // was in flight) is a real timeout — the request never completed.
-          if (fetchErr?.name === "AbortError" || controller.signal.aborted) {
+        } catch (fetchError: any) {
+          if (fetchError?.name === "AbortError" || controller.signal.aborted) {
             throw new Error("AI_PROVIDER_TIMEOUT");
           }
-          // Any other network error is treated as transient and retried
-          // if attempts remain. If we've exhausted attempts, propagate the
-          // raw error so the route can surface it as 500.
-          if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-            console.warn(`Gemini network error (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}), retrying...`, fetchErr);
+
+          if (attempt < MAX_RETRY_ATTEMPTS - 1 && Date.now() + 3000 < deadline) {
             continue;
           }
-          throw fetchErr;
+
+          throw new Error("GEMINI_SERVICE_UNAVAILABLE");
         }
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => "");
-          console.error(`Gemini API error (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, response.status, errorText);
+          console.error(
+            `Gemini API error (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`,
+            response.status,
+            errorText
+          );
 
-          // Non-retryable errors — abort immediately with the precise cause.
           if (response.status === 401 || response.status === 403) {
             throw new Error("GEMINI_API_INVALID_KEY");
           }
@@ -186,30 +188,37 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
             throw new Error("GEMINI_INVALID_INPUT");
           }
 
-          // Retryable: 408, 429, 500, 502, 503, 504
-          if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < MAX_RETRY_ATTEMPTS - 1) {
-            // Important: do NOT classify as AI_PROVIDER_TIMEOUT here. A
-            // completed 503 on the last attempt is GEMINI_SERVICE_UNAVAILABLE.
+          if (
+            RETRYABLE_STATUS_CODES.has(response.status) &&
+            attempt < MAX_RETRY_ATTEMPTS - 1 &&
+            Date.now() + 3000 < deadline
+          ) {
             continue;
           }
 
-          // Retries exhausted — classify by the status the provider actually
-          // returned, so the route returns the right HTTP code.
           if (response.status === 429) {
             throw new Error("GEMINI_RATE_LIMITED");
           }
           if (response.status === 408) {
             throw new Error("AI_PROVIDER_TIMEOUT");
           }
-          if (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
+          if ([500, 502, 503, 504].includes(response.status)) {
             throw new Error("GEMINI_SERVICE_UNAVAILABLE");
           }
-          throw new Error(`GEMINI_API_ERROR_${response.status}`);
+
+          throw new Error("GEMINI_SERVICE_UNAVAILABLE");
         }
 
-        // Successful response — parse and return.
         const data = (await response.json()) as any;
-        const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const finishReason = data?.candidates?.[0]?.finishReason;
+        if (finishReason === "MAX_TOKENS") {
+          throw new Error("AI_INVALID_RESPONSE");
+        }
+
+        const textResponse = data?.candidates?.[0]?.content?.parts
+          ?.map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+          .join("")
+          .trim();
 
         if (!textResponse) {
           throw new Error("EMPTY_AI_RESPONSE");
@@ -217,20 +226,23 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
 
         let parsedJson: unknown;
         try {
-          parsedJson = JSON.parse(textResponse);
+          parsedJson = JSON.parse(cleanModelOutput(textResponse));
         } catch {
           throw new Error("INVALID_JSON_FROM_AI");
         }
 
         const validated = RawExtractionResponseSchema.safeParse(parsedJson);
         if (!validated.success) {
-          console.warn("Zod raw extraction parse issue:", validated.error);
+          console.warn("Gemini raw extraction parse issue:", validated.error);
           const fallbackRaw = {
-            courses: Array.isArray((parsedJson as any)?.courses) ? (parsedJson as any).courses : [],
+            courses: Array.isArray((parsedJson as any)?.courses)
+              ? (parsedJson as any).courses
+              : [],
             issues: [
               {
                 field: "ai_parsing",
-                message: "بعض حقول الجدول لم تأتِ بالشكل المتوقع تماماً وتم تصحيحها تلقائياً.",
+                message:
+                  "بعض حقول الجدول لم تأتِ بالشكل المتوقع تماماً وتم تصحيحها تلقائياً.",
                 severity: "info" as const
               }
             ]
@@ -241,18 +253,12 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
         return normalizeExtractionResult(validated.data);
       }
 
-      // The loop only exits via `throw` above. If we get here, treat as
-      // service-unavailable so 3 completed retryable failures surface as
-      // 503, not 504.
       throw new Error("GEMINI_SERVICE_UNAVAILABLE");
-    } catch (err: any) {
-      // An AbortError that escaped the per-attempt catch (e.g. thrown by
-      // `response.json()` after the controller was aborted) is a real
-      // timeout — the operation did not complete in time.
-      if (err?.name === "AbortError" || (controller.signal.aborted && timedOut)) {
+    } catch (error: any) {
+      if (error?.name === "AbortError" || controller.signal.aborted) {
         throw new Error("AI_PROVIDER_TIMEOUT");
       }
-      throw err;
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
