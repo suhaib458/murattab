@@ -23,12 +23,52 @@ export interface DayParseResult {
   issues: TtuSemanticIssue[];
 }
 
+const FULL_DAY_NAMES: Readonly<Record<string, DayCode>> = {
+  السبت: "س",
+  سبت: "س",
+  الأحد: "ح",
+  الاحد: "ح",
+  أحد: "ح",
+  احد: "ح",
+  الاثنين: "ن",
+  الإثنين: "ن",
+  اثنين: "ن",
+  إثنين: "ن",
+  الثلاثاء: "ث",
+  ثلاثاء: "ث",
+  الأربعاء: "ر",
+  الاربعاء: "ر",
+  أربعاء: "ر",
+  اربعاء: "ر",
+  الخميس: "خ",
+  خميس: "خ",
+};
+
+function cleanDayToken(token: string): string {
+  return token
+    .replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "")
+    .replace(/^[,،;؛|/\\()[\]{}]+|[,،;؛|/\\()[\]{}]+$/g, "")
+    .trim();
+}
+
+function pushUniqueDay(days: DayCode[], seen: Set<DayCode>, code: DayCode): void {
+  if (!seen.has(code)) {
+    seen.add(code);
+    days.push(code);
+  }
+}
+
 /**
  * Parses day codes from a meeting segment text.
  *
- * @param segmentText - Raw text of the meeting segment (e.g. "ح ث 11:30 - 13:00")
- * @param sourceConfidence - Bounding confidence from the geometry segment (0–1)
- * @param courseName - Optional course name for issue diagnostic reporting
+ * Strict-token invariant:
+ * - Full Arabic day names are accepted.
+ * - A one-letter token is accepted only when it is exactly a canonical TTU day code.
+ * - A compact token such as "حث" or "حثخ" is accepted only when EVERY character
+ *   in the token is a canonical TTU day code.
+ * - Mixed/corrupted tokens such as "حت", "نار", "abcح", "&", "2" are ambiguous
+ *   and contribute ZERO inferred days. This prevents accidental day extraction
+ *   from arbitrary Arabic/OCR text.
  */
 export function parseTtuDayCodes(
   segmentText: string,
@@ -48,83 +88,47 @@ export function parseTtuDayCodes(
     return { days: [], confidence: 0, issues };
   }
 
-  // Remove time range pattern (e.g. "11:30 - 13:00", "08:30-10:00", including Arabic-Indic digits)
-  // to isolate day candidate tokens.
   const timePattern = /[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}\s*[-–—]\s*[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}/g;
   const nonTimeText = clean.replace(timePattern, " ").trim();
-
-  // Split non-time text into tokens
   const tokens = nonTimeText.split(/\s+/).filter(Boolean);
 
   const foundDays: DayCode[] = [];
   const seenDays = new Set<DayCode>();
   let hasAmbiguousToken = false;
 
-  for (const token of tokens) {
-    // Strip common punctuation or bidi characters
-    const stripped = token.replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "");
-    if (!stripped) continue;
+  for (const rawToken of tokens) {
+    const token = cleanDayToken(rawToken);
+    if (!token || /^[-–—]+$/.test(token)) continue;
 
-    // Check if token matches standard Arabic day names
-    if (stripped === "السبت" || stripped === "سبت") {
-      if (!seenDays.has("س")) { seenDays.add("س"); foundDays.push("س"); }
-      continue;
-    }
-    if (stripped === "الأحد" || stripped === "الاحد" || stripped === "أحد" || stripped === "احد") {
-      if (!seenDays.has("ح")) { seenDays.add("ح"); foundDays.push("ح"); }
-      continue;
-    }
-    if (stripped === "الاثنين" || stripped === "الإثنين" || stripped === "اثنين" || stripped === "إثنين") {
-      if (!seenDays.has("ن")) { seenDays.add("ن"); foundDays.push("ن"); }
-      continue;
-    }
-    if (stripped === "الثلاثاء" || stripped === "ثلاثاء") {
-      if (!seenDays.has("ث")) { seenDays.add("ث"); foundDays.push("ث"); }
-      continue;
-    }
-    if (stripped === "الأربعاء" || stripped === "الاربعاء" || stripped === "أربعاء" || stripped === "اربعاء") {
-      if (!seenDays.has("ر")) { seenDays.add("ر"); foundDays.push("ر"); }
-      continue;
-    }
-    if (stripped === "الخميس" || stripped === "خميس") {
-      if (!seenDays.has("خ")) { seenDays.add("خ"); foundDays.push("خ"); }
+    const namedDay = FULL_DAY_NAMES[token];
+    if (namedDay) {
+      pushUniqueDay(foundDays, seenDays, namedDay);
       continue;
     }
 
-    // Inspect individual characters in the token
-    const chars = [...stripped];
-    let matchedCharInToken = false;
+    const chars = [...token];
 
-    for (const char of chars) {
-      if (TTU_DAY_CODES.includes(char as DayCode)) {
-        const code = char as DayCode;
-        if (!seenDays.has(code)) {
-          seenDays.add(code);
-          foundDays.push(code);
-        }
-        matchedCharInToken = true;
+    // Compact TTU notation is valid ONLY if the entire token is composed of
+    // canonical day letters. Example: "حثخ" => ح، ث، خ.
+    const isPureCompactDayToken =
+      chars.length > 0 &&
+      chars.length <= TTU_DAY_CODES.length &&
+      chars.every((char) => TTU_DAY_CODES.includes(char as DayCode));
+
+    if (isPureCompactDayToken) {
+      for (const char of chars) {
+        pushUniqueDay(foundDays, seenDays, char as DayCode);
       }
+      continue;
     }
 
-    // If token contained non-day characters or corrupted OCR symbols (e.g. "&", "©", ",", "@")
-    const nonDayChars = chars.filter((c) => !TTU_DAY_CODES.includes(c as DayCode) && !/[\s,،\-–—]/.test(c));
-    if (nonDayChars.length > 0) {
-      hasAmbiguousToken = true;
-      issues.push({
-        code: "DAY_TOKEN_AMBIGUOUS",
-        message: `رمز اليوم "${token}" غير معروف أو غير مقروء بدقة${courseName ? ` لمادة "${courseName}"` : ""}.`,
-        severity: "warning",
-        courseName
-      });
-    } else if (!matchedCharInToken && !/^[,،\-–—]+$/.test(stripped)) {
-      hasAmbiguousToken = true;
-      issues.push({
-        code: "DAY_TOKEN_AMBIGUOUS",
-        message: `رمز اليوم "${token}" غير معروف أو غير مقروء بدقة${courseName ? ` لمادة "${courseName}"` : ""}.`,
-        severity: "warning",
-        courseName
-      });
-    }
+    hasAmbiguousToken = true;
+    issues.push({
+      code: "DAY_TOKEN_AMBIGUOUS",
+      message: `رمز اليوم "${rawToken}" غير معروف أو غير مقروء بدقة${courseName ? ` لمادة "${courseName}"` : ""}.`,
+      severity: "warning",
+      courseName
+    });
   }
 
   if (foundDays.length === 0) {
@@ -141,7 +145,6 @@ export function parseTtuDayCodes(
     };
   }
 
-  // Confidence is bounded by the source segment geometry confidence
   let confidence = Math.min(sourceConfidence, 0.95);
   if (hasAmbiguousToken) {
     confidence = Math.min(confidence, 0.70);
