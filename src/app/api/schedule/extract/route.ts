@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "خدمة التحليل الذكي مشغولة حاليًا بسبب ضغط مرتفع. يرجى المحاولة مرة أخرى بعد قليل."
+          error: "خدمة التحليل الذكي غير متاحة مؤقتًا أو مشغولة لدى مزود الخدمة. حاول مرة أخرى بعد قليل."
         },
         { status: 503 }
       );

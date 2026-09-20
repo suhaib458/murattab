@@ -6,12 +6,17 @@ import { SCHEDULE_EXTRACTION_SYSTEM_PROMPT, SCHEDULE_EXTRACTION_USER_PROMPT } fr
 export interface GeminiExtractorOptions {
   apiKey?: string;
   model?: string;
+  fallbackModels?: string[];
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   retryDelaysMs?: number[];
 }
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const DEFAULT_GEMINI_FALLBACK_MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash"
+] as const;
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 export const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 export const MAX_RETRY_ATTEMPTS = 3;
@@ -65,6 +70,7 @@ function cleanModelOutput(raw: string): string {
 export class GeminiScheduleExtractor implements ScheduleExtractor {
   private readonly apiKey: string;
   public readonly model: string;
+  public readonly models: string[];
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly retryDelays: number[];
@@ -72,6 +78,17 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
   constructor(options?: GeminiExtractorOptions) {
     this.apiKey = options?.apiKey || process.env.GEMINI_API_KEY || "";
     this.model = options?.model || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+
+    const configuredFallbacks = options?.fallbackModels ?? [
+      process.env.GEMINI_FALLBACK_MODEL || DEFAULT_GEMINI_FALLBACK_MODELS[0],
+      process.env.GEMINI_SECONDARY_FALLBACK_MODEL || DEFAULT_GEMINI_FALLBACK_MODELS[1]
+    ];
+
+    this.models = [this.model, ...configuredFallbacks]
+      .map((model) => model.trim())
+      .filter((model, index, list) => Boolean(model) && list.indexOf(model) === index)
+      .slice(0, MAX_RETRY_ATTEMPTS);
+
     this.timeoutMs = resolveProviderTimeoutMs(options?.timeoutMs);
     this.fetchImpl = options?.fetchFn || fetch;
     this.retryDelays = options?.retryDelaysMs ?? [1000, 2000];
@@ -99,7 +116,6 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
     }
 
     const base64Data = Buffer.from(input.bytes).toString("base64");
-    const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(this.model)}:generateContent`;
     const deadline = Date.now() + this.timeoutMs;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -129,7 +145,9 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
     });
 
     try {
-      for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      for (let attempt = 0; attempt < this.models.length; attempt++) {
+        const currentModel = this.models[attempt];
+        const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(currentModel)}:generateContent`;
         const remainingMs = deadline - Date.now();
         if (remainingMs <= 1500 || controller.signal.aborted) {
           throw new Error("AI_PROVIDER_TIMEOUT");
@@ -163,7 +181,7 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
             throw new Error("AI_PROVIDER_TIMEOUT");
           }
 
-          if (attempt < MAX_RETRY_ATTEMPTS - 1 && Date.now() + 3000 < deadline) {
+          if (attempt < this.models.length - 1 && Date.now() + 3000 < deadline) {
             continue;
           }
 
@@ -173,7 +191,7 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
         if (!response.ok) {
           const errorText = await response.text().catch(() => "");
           console.error(
-            `Gemini API error (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`,
+            `Gemini API error [${currentModel}] (candidate ${attempt + 1}/${this.models.length}):`,
             response.status,
             errorText
           );
@@ -190,7 +208,7 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
 
           if (
             RETRYABLE_STATUS_CODES.has(response.status) &&
-            attempt < MAX_RETRY_ATTEMPTS - 1 &&
+            attempt < this.models.length - 1 &&
             Date.now() + 3000 < deadline
           ) {
             continue;
@@ -207,6 +225,10 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
           }
 
           throw new Error("GEMINI_SERVICE_UNAVAILABLE");
+        }
+
+        if (attempt > 0) {
+          console.warn(`Gemini fallback succeeded with model ${currentModel}.`);
         }
 
         const data = (await response.json()) as any;
