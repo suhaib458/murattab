@@ -999,15 +999,16 @@ export function determineFieldStatus(
 ): RefinementFieldStatus {
   if (columnKey === "meeting") {
     const timePattern = /[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}\s*[-–—]\s*[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}/g;
-    const hasValidTime = timePattern.test(text);
-    const nonTime = text.replace(timePattern, " ").trim();
-    const chars = [...nonTime.replace(/[\s,،\-–—]/g, "")];
+    const hasTimeRange = timePattern.test(text);
+    const dayResult = parseTtuDayCodes(text, 1);
+    const hasAmbiguousDay = dayResult.issues.some((issue) => issue.code === "DAY_TOKEN_AMBIGUOUS");
 
-    const hasCanonical = chars.some((c) => TTU_DAY_CODES.includes(c as any));
-    const hasUnexplained = chars.some((c) => !TTU_DAY_CODES.includes(c as any));
-
-    if (hasCanonical && !hasUnexplained && hasValidTime) return "RESOLVED_FROM_PIXELS";
-    if (hasCanonical && hasUnexplained) return "PARTIALLY_RESOLVED";
+    if (dayResult.days.length > 0 && !hasAmbiguousDay && hasTimeRange) {
+      return "RESOLVED_FROM_PIXELS";
+    }
+    if (dayResult.days.length > 0) {
+      return "PARTIALLY_RESOLVED";
+    }
     return "UNRESOLVED";
   }
 
