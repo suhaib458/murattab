@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { GeminiScheduleExtractor } from "@/domain/ai/gemini-extractor";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 import { ScheduleExtractionResultSchema, type ScheduleExtractor } from "@/domain/models";
+import {
+  AiUsageGuardError,
+  consumeExtractionRateLimit,
+  createAnonymousClientKey,
+  createExtractionCacheKey,
+  runCachedExtraction
+} from "@/server/ai/usage-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -62,22 +69,63 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
+    const cacheKey = createExtractionCacheKey(bytes, file.type);
+    const clientKey = createAnonymousClientKey(request);
 
-    const extractor = defaultExtractor || new GeminiScheduleExtractor();
-    const result = await extractor.extract({
-      fileName: (file as any).name || "schedule_file",
-      bytes,
-      mimeType: file.type
+    const { result, source } = await runCachedExtraction(cacheKey, async () => {
+      const rateLimit = consumeExtractionRateLimit(clientKey);
+      if (!rateLimit.allowed) {
+        throw new AiUsageGuardError(rateLimit);
+      }
+
+      const extractor = defaultExtractor || new GeminiScheduleExtractor();
+      return extractor.extract({
+        fileName: (file as any).name || "schedule_file",
+        bytes,
+        mimeType: file.type
+      });
     });
 
     const parsedResult = ScheduleExtractionResultSchema.parse(result);
 
-    return NextResponse.json({
-      success: true,
-      result: parsedResult
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        result: parsedResult
+      },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Murattab-AI-Cache": source
+        }
+      }
+    );
   } catch (error: any) {
     console.error("Schedule extraction error:", error);
+
+    if (error instanceof AiUsageGuardError || error?.message === "AI_USAGE_GUARD_LIMITED") {
+      const retryAfterSeconds =
+        error instanceof AiUsageGuardError && Number.isFinite(error.retryAfterSeconds)
+          ? error.retryAfterSeconds
+          : 60;
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            error instanceof AiUsageGuardError && error.scope === "client"
+              ? "تم إرسال عدة طلبات تحليل خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى."
+              : "خدمة التحليل تستقبل عدة طلبات الآن. انتظر قليلًا ثم حاول مرة أخرى."
+        },
+        {
+          status: 429,
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Retry-After": String(retryAfterSeconds)
+          }
+        }
+      );
+    }
 
     if (error.message === "AI_API_KEY_MISSING" || error.message === "GEMINI_API_KEY_MISSING") {
       return NextResponse.json(
