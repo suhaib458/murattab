@@ -581,15 +581,44 @@ export function groupMeetingEntities(
     });
 
     const clusterText = cluster.map((w) => w.text.trim()).join(" ");
+    const timeWords = cluster.filter((w) =>
+      /[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}/.test(w.text)
+    );
     const timeMatches = clusterText.match(/[\d٠-٩]{1,2}\s*:\s*[\d٠-٩]{2}/g) || [];
 
     let timeRange: string | null = null;
-    if (timeMatches.length >= 2) {
-      const t1 = toMinutes(timeMatches[0]);
-      const t2 = toMinutes(timeMatches[1]);
+    if (timeWords.length >= 2) {
+      // A wrapped TTU meeting can place the END time on the visual line above
+      // the day + START time. Do not numerically sort the times: instead, when
+      // a strict day token exists, the time geometrically closest to that day
+      // token is the start. This recovers wrapped "ن 08:30 - 10:30" while still
+      // preserving an actual inverted single-line "ح 20:30 - 19:30".
+      const strictDayWords = cluster.filter(
+        (w) => parseTtuDayCodes(w.text, w.confidence).days.length > 0
+      );
+
+      let orderedTimeWords = timeWords;
+      if (strictDayWords.length > 0) {
+        const distanceToNearestDay = (timeWord: OcrWord): number => {
+          const tx = (timeWord.bbox.x0 + timeWord.bbox.x1) / 2;
+          const ty = (timeWord.bbox.y0 + timeWord.bbox.y1) / 2;
+          return Math.min(
+            ...strictDayWords.map((dayWord) => {
+              const dx = tx - (dayWord.bbox.x0 + dayWord.bbox.x1) / 2;
+              const dy = ty - (dayWord.bbox.y0 + dayWord.bbox.y1) / 2;
+              return Math.hypot(dx, dy * 2);
+            })
+          );
+        };
+
+        orderedTimeWords = [...timeWords].sort(
+          (a, b) => distanceToNearestDay(a) - distanceToNearestDay(b)
+        );
+      }
+
+      const t1 = toMinutes(orderedTimeWords[0]?.text);
+      const t2 = toMinutes(orderedTimeWords[1]?.text);
       if (t1 !== null && t2 !== null) {
-        // Preserve source order. An inverted OCR range must remain inverted so
-        // the semantic time parser can flag it instead of silently "fixing" it.
         timeRange = `${formatMinutes(t1)} - ${formatMinutes(t2)}`;
       }
     } else if (timeMatches.length === 1) {
