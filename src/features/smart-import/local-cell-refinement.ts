@@ -26,8 +26,8 @@ import type {
   TtuTableColumn
 } from "@/domain/ttu-table/types";
 import type { TtuParsedSchedule } from "@/domain/ttu-schedule-parser/types";
-import { TTU_DAY_CODES } from "@/domain/ttu-schedule-parser/day-parser";
-import { expandRoom, getIctLabLabel } from "@/domain/schedule";
+import { TTU_DAY_CODES, parseTtuDayCodes } from "@/domain/ttu-schedule-parser/day-parser";
+import { isVerifiedTtuRoomText } from "@/domain/ttu-schedule-parser/room-parser";
 import { flattenLightBackground, enhanceContrast } from "@/domain/ocr/image-preprocessor";
 
 export const TARGET_CELL_SCALE = 4.0;
@@ -392,9 +392,11 @@ export function groupRoomEntities(
   );
   if (cleanWords.length === 0) return [];
 
-  // Identify room anchors (standalone numbers like "207", "4") and building codes ("ICT", "DS-ICT", "05-167")
+  // Identify room anchors (standalone numbers like "207", "4") and verified ICT codes.
+  // Generic digit-dash-digit tokens (e.g. "05-167") are NOT accepted as building codes:
+  // on the real TTU screenshot this was an OCR corruption of DS-ICT.
   const isBuildingToken = (t: string) =>
-    /^(ICT|DS-ICT|\d+-\d+)$/i.test(t.replace(/[\u200E\u200F]/g, "").trim());
+    /^(ICT|DS-ICT)$/i.test(t.replace(/[\u200E\u200F]/g, "").trim());
   const numberAnchors = cleanWords.filter(
     (w) => /^\d{1,4}$/.test(w.text.trim()) && !isBuildingToken(w.text)
   );
@@ -585,10 +587,10 @@ export function groupMeetingEntities(
     if (timeMatches.length >= 2) {
       const t1 = toMinutes(timeMatches[0]);
       const t2 = toMinutes(timeMatches[1]);
-      if (t1 !== null && t2 !== null && t1 !== t2) {
-        const start = Math.min(t1, t2);
-        const end = Math.max(t1, t2);
-        timeRange = `${formatMinutes(start)} - ${formatMinutes(end)}`;
+      if (t1 !== null && t2 !== null) {
+        // Preserve source order. An inverted OCR range must remain inverted so
+        // the semantic time parser can flag it instead of silently "fixing" it.
+        timeRange = `${formatMinutes(t1)} - ${formatMinutes(t2)}`;
       }
     } else if (timeMatches.length === 1) {
       timeRange = timeMatches[0];
@@ -812,43 +814,22 @@ export function scoreSingleRoomEntity(text: string, confidence = 0.8): number {
   const clean = text.trim().replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "");
   if (!clean) return -50;
 
-  let score = 0;
+  // Resolved room evidence must match the complete verified TTU grammar.
+  // Partial "looks like a room" matches are deliberately insufficient.
+  if (!isVerifiedTtuRoomText(clean)) {
+    let penalty = -20;
 
-  // 1. High-confidence verified TTU patterns (+25 points)
-  const isExpanded = expandRoom(clean).label !== clean;
-  const isIctLab = Boolean(getIctLabLabel(clean, "lab"));
-  const isStandardHall = /^قاعة\s+محوسبة\s+\d+/i.test(clean);
-  const isDsIct = /^DS-ICT\s*\d+/i.test(clean);
-  const isComputerLab = /^مختبر\s+الحاسوب/i.test(clean);
+    if (/\bمتي\b/i.test(clean)) penalty -= 20;
+    if (/\b\d{2}-\d{2,3}\b/.test(clean)) penalty -= 20;
+    if (/^[|~_»«]/.test(clean) || /[|~_»«]$/.test(clean)) penalty -= 10;
 
-  if (isExpanded || isIctLab || isStandardHall || isDsIct || isComputerLab) {
-    score += 25;
-  } else if (/^(Online|أونلاين|عبر الإنترنت)$/i.test(clean)) {
-    score += 25;
-  } else if (/^(م|ع|هـ|ه)\s*\d{2,3}$/.test(clean)) {
-    score += 20;
-  } else if (/\b(ICT|DS-ICT)\b/i.test(clean)) {
-    score += 15;
+    const unexplainedLatin = clean.replace(/ICT|DS-ICT|Online/gi, "").match(/[a-zA-Z]/g) || [];
+    penalty -= unexplainedLatin.length * 8;
+
+    return penalty + Math.round(confidence * 3);
   }
 
-  // 2. Heavy penalties for noisy/corrupted tokens (-30 points each)
-  if (/\bمتي\b/i.test(clean)) {
-    score -= 30; // Heavy penalty for "متي" (corrupted "مختبر")
-  }
-  if (/\b167\b/.test(clean) && !clean.includes("05-167")) {
-    score -= 25; // "167" in room text is OCR misreading "ICT"
-  }
-  if (/^[|~_»«]/.test(clean) || /[|~_»«]$/.test(clean)) {
-    score -= 10;
-  }
-
-  const latin = clean.replace(/ICT|DS-ICT|Online/gi, "").match(/[a-zA-Z]/g) || [];
-  if (latin.length > 0) {
-    score -= latin.length * 10;
-  }
-
-  score += Math.round(confidence * 5);
-  return score;
+  return 30 + Math.round(confidence * 5);
 }
 
 /**
@@ -1048,39 +1029,13 @@ export function determineFieldStatus(
     const clean = text.trim().replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "");
     if (!clean) return "UNRESOLVED";
 
-    // If text contains corrupted tokens like "متي" or border noise, it is UNRESOLVED
-    if (/\bمتي\b/i.test(clean) || /^[|~_]/.test(clean)) {
-      return "UNRESOLVED";
-    }
+    const lines = clean.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) return "UNRESOLVED";
 
-    const lines = clean.split("\n").map((l) => l.trim()).filter(Boolean);
-    const allLinesResolved = lines.every((line) => {
-      if (scoreSingleRoomEntity(line) < 10) return false;
-      return (
-        expandRoom(line).label !== line ||
-        Boolean(getIctLabLabel(line, "lab")) ||
-        /^قاعة\s+محوسبة\s+\d+/i.test(line) ||
-        /^DS-ICT\s*\d+/i.test(line) ||
-        /^مختبر\s+الحاسوب/i.test(line) ||
-        /^(Online|أونلاين|عبر الإنترنت)$/i.test(line)
-      );
-    });
-
-    if (allLinesResolved && lines.length > 0) {
-      return "RESOLVED_FROM_PIXELS";
-    }
-
-    const someResolved = lines.some((line) => {
-      return (
-        expandRoom(line).label !== line ||
-        Boolean(getIctLabLabel(line, "lab")) ||
-        /^قاعة\s+محوسبة\s+\d+/i.test(line) ||
-        /^DS-ICT\s*\d+/i.test(line) ||
-        /^مختبر\s+الحاسوب/i.test(line)
-      );
-    });
-
-    return someResolved ? "PARTIALLY_RESOLVED" : "UNRESOLVED";
+    const verifiedCount = lines.filter((line) => isVerifiedTtuRoomText(line)).length;
+    if (verifiedCount === lines.length) return "RESOLVED_FROM_PIXELS";
+    if (verifiedCount > 0) return "PARTIALLY_RESOLVED";
+    return "UNRESOLVED";
   }
 
   return text.trim().length > 0 ? "RESOLVED_FROM_PIXELS" : "UNRESOLVED";
@@ -1205,7 +1160,9 @@ export async function refineTableCells(
 
       console.log(`[Phase 5B Refinement] Room Row ${p.rowIndex}: baseline="${baselineText}" => candidate=${roomEntities.map(e => e.text).join(" | ")}, replaced=${arbitration.replaced}, reason=${arbitration.reason}`);
 
-      const finalEntities = arbitration.entities.length > 0 ? arbitration.entities : (roomEntities.length > 0 ? roomEntities : baselineEntities);
+      // Arbitration is authoritative. Never resurrect a candidate that was
+      // explicitly rejected when baseline evidence is empty.
+      const finalEntities = arbitration.entities;
 
       if (finalEntities.length > 0) {
         const segments: TtuCellSegment[] = finalEntities.map((ent) => ({
