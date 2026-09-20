@@ -11,6 +11,18 @@ export interface ExtractionRateLimitDecision {
   retryAfterSeconds: number;
 }
 
+export class AiUsageGuardError extends Error {
+  readonly retryAfterSeconds: number;
+  readonly scope: ExtractionLimitScope;
+
+  constructor(decision: ExtractionRateLimitDecision) {
+    super("AI_USAGE_GUARD_LIMITED");
+    this.name = "AiUsageGuardError";
+    this.retryAfterSeconds = decision.retryAfterSeconds;
+    this.scope = decision.scope || "client";
+  }
+}
+
 interface WindowCounter {
   count: number;
   resetAt: number;
