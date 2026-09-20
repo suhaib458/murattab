@@ -38,8 +38,11 @@ export function toScheduleExtractionResult(parsed: TtuParsedSchedule): ScheduleE
 
   for (let cIndex = 0; cIndex < parsed.courses.length; cIndex++) {
     const pCourse = parsed.courses[cIndex];
-    const courseKey = `course_${cIndex}`;
-    confidenceRecord[`${courseKey}_name`] = pCourse.confidence;
+    const courseId = generateId();
+    // Canonical Smart Import contract uses course_${courseId}_name
+    confidenceRecord[`course_${courseId}_name`] = pCourse.confidence;
+    // Retain index-based key for backward compatibility
+    confidenceRecord[`course_${cIndex}_name`] = pCourse.confidence;
 
     const draftSessions: DraftSession[] = [];
 
@@ -54,6 +57,7 @@ export function toScheduleExtractionResult(parsed: TtuParsedSchedule): ScheduleE
 
       draftSessions.push({
         id: sessionId,
+        courseId,
         day: pSess.day,
         startsAt: pSess.startsAt,
         endsAt: pSess.endsAt,

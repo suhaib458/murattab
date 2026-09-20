@@ -7,6 +7,8 @@ import { dayNames, expandRoom, findConflicts, formatArabicTime, getIctLabLabel, 
 import type { AppSnapshot, ScheduleRepository } from "@/repositories/schedule-repository";
 import { isSupportedMimeType, MAX_FILE_SIZE_BYTES } from "@/domain/ai/extraction-schema";
 import { generateId } from "@/lib/uuid";
+import type { LocalOcrEngine } from "@/domain/ocr/tesseract-engine";
+import { analyzeScheduleImageLocally, LOCAL_ANALYSIS_STAGES } from "../local-schedule-analysis";
 
 interface ImportDialogProps {
   data: AppSnapshot;
@@ -18,7 +20,7 @@ interface ImportDialogProps {
 
 type DialogStep = "upload" | "analyzing" | "review";
 
-interface EditableSession {
+export interface EditableSession {
   id: string;
   day: DayCode | "";
   startsAt: string;
@@ -31,7 +33,7 @@ interface EditableSession {
   confidenceRoom?: number;
 }
 
-interface EditableCourse {
+export interface EditableCourse {
   tempId: string;
   name: string;
   nameConfidence?: number;
@@ -75,17 +77,84 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} م.ب`;
 }
 
+/**
+ * Shared mapper converting ScheduleExtractionResult into EditableCourse[] for Review UI.
+ * Used by both Local Image analysis and Cloud/PDF analysis.
+ */
+export function buildEditableReviewCourses(
+  result: ScheduleExtractionResult,
+  existingCourses: Course[]
+): EditableCourse[] {
+  return result.draft.courses.map((c, cIdx) => {
+    const isDuplicate = Boolean(
+      c.name.trim() &&
+      existingCourses.some((ec) => ec.name.trim().toLowerCase() === c.name.trim().toLowerCase())
+    );
+
+    const firstSessionCourseId = c.sessions[0]?.courseId;
+    const nameConfidence =
+      (firstSessionCourseId ? result.confidence[`course_${firstSessionCourseId}_name`] : undefined) ??
+      result.confidence[`course_${cIdx}_name`] ??
+      (c.name ? result.confidence[`course_${c.name}_name`] : undefined) ??
+      0.9;
+
+    return {
+      tempId: generateId(),
+      name: c.name || "",
+      nameConfidence,
+      duplicateAction: isDuplicate ? "replace" : "add",
+      sessions: c.sessions.map((s) => ({
+        id: s.id || generateId(),
+        day: s.day || "",
+        startsAt: s.startsAt || "",
+        endsAt: s.endsAt || "",
+        roomRaw: s.roomRaw || "",
+        roomExpanded: s.roomExpanded,
+        kind: s.kind === "lab" ? "lab" : s.kind === "lecture" ? "lecture" : "unspecified",
+        confidenceDay: result.confidence[`session_${s.id}_day`] ?? 0.9,
+        confidenceTime: result.confidence[`session_${s.id}_time`] ?? 0.9,
+        confidenceRoom: result.confidence[`session_${s.id}_room`] ?? 0.9
+      }))
+    };
+  });
+}
+
+function mapLocalAnalysisError(err: unknown): string {
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as any).code);
+    switch (code) {
+      case "OCR_IMAGE_DECODE_FAILED":
+        return "تعذر قراءة الصورة. تأكد من أن الملف صورة صالحة وواضحة.";
+      case "OCR_INITIALIZATION_FAILED":
+        return "تعذر تشغيل التحليل المحلي على هذا الجهاز.";
+      case "OCR_RECOGNITION_FAILED":
+        return "تعذر قراءة النص من الصورة محليًا.";
+      case "NO_TABLE_DETECTED":
+        return "لم يتم العثور على جدول دراسي واضح في الصورة.";
+      case "NO_COURSES_DETECTED":
+        return "لم يتم العثور على أي مواد دراسية صالحة في الجدول.";
+    }
+  }
+  return "تعذر استخراج الجدول من الصورة محليًا.";
+}
+
 export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogProps) {
   const [step, setStep] = useState<DialogStep>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [consent, setConsent] = useState(false);
+  const [cloudConsent, setCloudConsent] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Analysis state
-  const [analyzingStage, setAnalyzingStage] = useState<string>("رفع الملف");
+  // Analysis & source state
+  const [analysisSource, setAnalysisSource] = useState<"local" | "cloud">("local");
+  const [localAnalysisFailed, setLocalAnalysisFailed] = useState(false);
+  const [analyzingStage, setAnalyzingStage] = useState<string>("بدء التحليل…");
+
+  // Attempt generation token & references for honest cancellation
+  const analysisAttemptRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const ocrEngineRef = useRef<LocalOcrEngine | null>(null);
 
   // Review state
   const [extractedCourses, setExtractedCourses] = useState<EditableCourse[]>([]);
@@ -93,20 +162,43 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
   const [confirmConflict, setConfirmConflict] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Cleanup object URL
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
+      analysisAttemptRef.current += 1;
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (ocrEngineRef.current) {
+        ocrEngineRef.current.dispose().catch(() => {});
+      }
     };
   }, [previewUrl]);
 
+  // File selection: strictly reset all prior analysis and consent state
   const handleFileSelect = useCallback((selectedFile: File) => {
+    // Invalidate any in-progress attempt
+    analysisAttemptRef.current += 1;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (ocrEngineRef.current) {
+      ocrEngineRef.current.dispose().catch(() => {});
+      ocrEngineRef.current = null;
+    }
+
     setErrorMessage(null);
+    setCloudConsent(false);
+    setLocalAnalysisFailed(false);
+    setExtractedCourses([]);
+    setExtractionIssues([]);
+    setAnalyzingStage("");
+    setAnalysisSource(selectedFile.type === "application/pdf" ? "cloud" : "local");
+    setStep("upload");
 
     if (!isSupportedMimeType(selectedFile.type)) {
       setErrorMessage("نوع الملف غير مدعوم. الصيغ المدعومة هي: JPG، PNG، WebP، و PDF فقط.");
@@ -139,15 +231,66 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
     }
   };
 
-  const startExtraction = async () => {
+  // Local image extraction (100% in-browser, no cloud upload)
+  const startLocalExtraction = async () => {
     if (!file) {
       setErrorMessage("يرجى اختيار ملف أولاً.");
       return;
     }
-    if (!consent) {
+
+    analysisAttemptRef.current += 1;
+    const currentAttempt = analysisAttemptRef.current;
+
+    setErrorMessage(null);
+    setLocalAnalysisFailed(false);
+    setStep("analyzing");
+    setAnalyzingStage(LOCAL_ANALYSIS_STAGES.PREPARING);
+
+    try {
+      if (!ocrEngineRef.current) {
+        const { LocalOcrEngine } = await import("@/domain/ocr/tesseract-engine");
+        ocrEngineRef.current = new LocalOcrEngine();
+      }
+
+      const result = await analyzeScheduleImageLocally(file, {
+        ocrEngine: ocrEngineRef.current,
+        onProgress: (stage) => {
+          if (currentAttempt === analysisAttemptRef.current) {
+            setAnalyzingStage(stage);
+          }
+        }
+      });
+
+      if (currentAttempt !== analysisAttemptRef.current) return;
+
+      const initialCourses = buildEditableReviewCourses(result, data.courses);
+      setExtractedCourses(initialCourses);
+      setExtractionIssues(result.draft.issues || []);
+      setAnalysisSource("local");
+      setStep("review");
+    } catch (err: unknown) {
+      if (currentAttempt !== analysisAttemptRef.current) return;
+
+      const mappedMsg = mapLocalAnalysisError(err);
+      setErrorMessage(mappedMsg);
+      setLocalAnalysisFailed(true);
+      setStep("upload");
+    }
+  };
+
+  // Cloud/PDF extraction (via POST /api/schedule/extract)
+  const startCloudExtraction = async () => {
+    if (!file) {
+      setErrorMessage("يرجى اختيار ملف أولاً.");
+      return;
+    }
+    if (!cloudConsent) {
       setErrorMessage("يرجى الموافقة على شروط التحليل والخصوصية للمتابعة.");
       return;
     }
+
+    analysisAttemptRef.current += 1;
+    const currentAttempt = analysisAttemptRef.current;
 
     setErrorMessage(null);
     setStep("analyzing");
@@ -162,7 +305,9 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       formData.append("consent", "true");
 
       const timer = setTimeout(() => {
-        setAnalyzingStage("تحليل الجدول واستخراج المحاضرات والقاعات…");
+        if (currentAttempt === analysisAttemptRef.current) {
+          setAnalyzingStage("تحليل الجدول واستخراج المحاضرات والقاعات…");
+        }
       }, 1200);
 
       const res = await fetch("/api/schedule/extract", {
@@ -172,6 +317,8 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       });
 
       clearTimeout(timer);
+      if (currentAttempt !== analysisAttemptRef.current) return;
+
       setAnalyzingStage("تجهيز نتائج الجدول للمراجعة…");
 
       const resData = await res.json().catch(() => null);
@@ -184,35 +331,15 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       }
 
       const result: ScheduleExtractionResult = resData.result;
-      const initialCourses: EditableCourse[] = result.draft.courses.map((c) => {
-        const isDuplicate = Boolean(
-          c.name.trim() &&
-          data.courses.some((ec) => ec.name.trim().toLowerCase() === c.name.trim().toLowerCase())
-        );
-        return {
-          tempId: generateId(),
-          name: c.name || "",
-          nameConfidence: result.confidence[`course_${c.sessions[0]?.courseId}_name`] ?? 0.9,
-          duplicateAction: isDuplicate ? "replace" : "add",
-          sessions: c.sessions.map((s) => ({
-            id: s.id || generateId(),
-            day: s.day || "",
-            startsAt: s.startsAt || "",
-            endsAt: s.endsAt || "",
-            roomRaw: s.roomRaw || "",
-            roomExpanded: s.roomExpanded,
-            kind: s.kind === "lab" ? "lab" : s.kind === "lecture" ? "lecture" : "unspecified",
-            confidenceDay: result.confidence[`session_${s.id}_day`] ?? 0.9,
-            confidenceTime: result.confidence[`session_${s.id}_time`] ?? 0.9,
-            confidenceRoom: result.confidence[`session_${s.id}_room`] ?? 0.9
-          }))
-        };
-      });
+      const initialCourses = buildEditableReviewCourses(result, data.courses);
 
       setExtractedCourses(initialCourses);
       setExtractionIssues(result.draft.issues || []);
+      setAnalysisSource("cloud");
       setStep("review");
     } catch (err: any) {
+      if (currentAttempt !== analysisAttemptRef.current) return;
+
       if (err.name === "AbortError") {
         setErrorMessage("تم إلغاء عملية التحليل.");
       } else {
@@ -225,9 +352,16 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
   };
 
   const cancelAnalysis = () => {
+    analysisAttemptRef.current += 1;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
+    if (ocrEngineRef.current) {
+      ocrEngineRef.current.dispose().catch(() => {});
+      ocrEngineRef.current = null;
+    }
+    setStep("upload");
   };
 
   // Editing handlers in Review step
@@ -247,19 +381,20 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
     setExtractedCourses((prev) => prev.filter((c) => c.tempId !== tempId));
   };
 
+  // Manual course name starts completely empty to prevent accidental placeholder persistence
   const addMissingCourse = () => {
     const newCourse: EditableCourse = {
       tempId: generateId(),
-      name: "مادة جديدة",
+      name: "",
       duplicateAction: "add",
       sessions: [
         {
           id: generateId(),
-          day: "ح",
-          startsAt: "08:30",
-          endsAt: "09:30",
-          roomRaw: "207 م",
-          kind: "lecture"
+          day: "",
+          startsAt: "",
+          endsAt: "",
+          roomRaw: "",
+          kind: "unspecified"
         }
       ]
     };
@@ -288,7 +423,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
           startsAt: "",
           endsAt: "",
           roomRaw: "",
-          kind: "lecture"
+          kind: "unspecified"
         };
         return {
           ...c,
@@ -333,7 +468,6 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
   // Calculate conflicts against existing schedule
   const existingPoolForConflict = data.sessions.filter((es) => {
-    // If user chose to replace an existing course, don't count its old sessions as conflicts!
     const matchingExtracted = extractedCourses.find(
       (ec) => ec.duplicateAction === "replace" && ec.name.trim().toLowerCase() === data.courses.find((c) => c.id === es.courseId)?.name.trim().toLowerCase()
     );
@@ -446,6 +580,9 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
     }
   };
 
+  const isPdf = file?.type === "application/pdf";
+  const isImage = Boolean(file && file.type.startsWith("image/"));
+
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="import-title">
       <div className="dialog" style={{ maxWidth: step === "review" ? 720 : 540 }}>
@@ -469,11 +606,11 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
           </div>
         )}
 
-        {/* STEP 1: UPLOAD & CONSENT */}
+        {/* STEP 1: UPLOAD & DISCLOSURE */}
         {step === "upload" && (
           <div className="form">
             <p className="muted" style={{ margin: 0 }}>
-              ارفع صورة لجدولك الدراسي (JPG، PNG، WebP) أو ملف PDF ليقوم النظام باستخراج المواد والقاعات والمواعيد تلقائيًا.
+              ارفع صورة لجدولك الدراسي (JPG، PNG، WebP) لتحليلها محليًا على جهازك، أو ملف PDF لاستخراجه تلقائيًا.
             </p>
 
             {/* Drag & Drop Zone */}
@@ -554,6 +691,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
                   onClick={(e) => {
                     e.stopPropagation();
                     setFile(null);
+                    setLocalAnalysisFailed(false);
                     if (previewUrl) {
                       URL.revokeObjectURL(previewUrl);
                       setPreviewUrl(null);
@@ -565,57 +703,159 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
               </div>
             )}
 
-            {/* Privacy & Consent Disclosure */}
-            <div
-              style={{
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                padding: 14,
-                fontSize: "0.88rem"
-              }}
-            >
-              <p style={{ fontWeight: 700, margin: "0 0 6px", color: "var(--foreground)" }}>
-                🔒 إشعار الخصوصية والموافقة:
-              </p>
-              <ul style={{ margin: 0, paddingRight: 20, color: "var(--foreground-muted)", lineHeight: 1.5 }}>
-                <li>سيتم إرسال الصورة أو الملف إلى مزود الذكاء الاصطناعي لغرض استخراج الجدول فقط.</li>
-                <li>لن يتم حفظ الملف نهائيًا على الخادم أو في قاعدة بيانات «مرتب».</li>
-                <li>ستتمكن من مراجعة كل مادة وتعديل أي تفاصيل بنفسك قبل حفظها.</li>
-              </ul>
-              <label
+            {/* ROUTE A: IMAGE PRIVACY (Local-first, no consent required) */}
+            {isImage && !localAnalysisFailed && (
+              <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginTop: 12,
-                  fontWeight: 700,
-                  cursor: "pointer"
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: 14,
+                  fontSize: "0.88rem"
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  style={{ width: 18, height: 18, accentColor: "var(--primary)", cursor: "pointer" }}
-                />
-                <span>أوافق صراحة على إرسال الملف للتحليل لغرض استخراج الجدول</span>
-              </label>
-            </div>
+                <p style={{ fontWeight: 700, margin: "0 0 6px", color: "var(--foreground)" }}>
+                  🔒 الخصوصية والأمان:
+                </p>
+                <p style={{ margin: 0, color: "var(--foreground-muted)", lineHeight: 1.5 }}>
+                  يتم تحليل الصورة محليًا على جهازك، ولا يتم رفعها إلى خادم خارجي.
+                </p>
+              </div>
+            )}
+
+            {/* ROUTE B: HARD LOCAL FAILURE -> EXPLICIT OPT-IN CLOUD FALLBACK */}
+            {isImage && localAnalysisFailed && (
+              <div
+                data-testid="local-fallback-card"
+                style={{
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--warning)",
+                  borderRadius: 12,
+                  padding: 14,
+                  fontSize: "0.88rem"
+                }}
+              >
+                <p style={{ fontWeight: 700, margin: "0 0 6px", color: "var(--foreground)" }}>
+                  ☁️ التحليل المتقدم عبر الخادم (اختياري):
+                </p>
+                <p style={{ margin: "0 0 10px", color: "var(--foreground-muted)", lineHeight: 1.5 }}>
+                  تعذر استخراج الجدول محليًا. يمكنك تجربة التحليل المتقدم عبر الخادم. سيتم إرسال الملف إلى مزود التحليل الخارجي بعد موافقتك.
+                </p>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={cloudConsent}
+                    onChange={(e) => setCloudConsent(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: "var(--primary)", cursor: "pointer" }}
+                  />
+                  <span>أوافق صراحة على إرسال الملف إلى مزود التحليل الخارجي</span>
+                </label>
+              </div>
+            )}
+
+            {/* ROUTE C: PDF PRIVACY & CLOUD CONSENT */}
+            {isPdf && (
+              <div
+                style={{
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: 14,
+                  fontSize: "0.88rem"
+                }}
+              >
+                <p style={{ fontWeight: 700, margin: "0 0 6px", color: "var(--foreground)" }}>
+                  🔒 إشعار الخصوصية والموافقة:
+                </p>
+                <p style={{ margin: "0 0 8px", color: "var(--foreground-muted)", lineHeight: 1.5 }}>
+                  ملفات PDF يتم تحليلها حاليًا عبر خدمة التحليل المتقدم. سيتم إرسال الملف إلى مزود التحليل لغرض استخراج الجدول فقط.
+                </p>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginTop: 8,
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={cloudConsent}
+                    onChange={(e) => setCloudConsent(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: "var(--primary)", cursor: "pointer" }}
+                  />
+                  <span>أوافق صراحة على إرسال الملف للتحليل لغرض استخراج الجدول</span>
+                </label>
+              </div>
+            )}
 
             {/* Actions */}
-            <div className="actions" style={{ justifyContent: "flex-end", marginTop: 8 }}>
+            <div className="actions" style={{ justifyContent: "flex-end", marginTop: 8, gap: 8 }}>
               <button type="button" className="button secondary" onClick={close}>
                 إلغاء
               </button>
-              <button
-                type="button"
-                className="button"
-                disabled={!file || !consent}
-                onClick={startExtraction}
-              >
-                بدء تحليل الجدول
-              </button>
+
+              {/* Image Normal Local Flow */}
+              {isImage && !localAnalysisFailed && (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!file}
+                  onClick={startLocalExtraction}
+                >
+                  بدء تحليل الجدول
+                </button>
+              )}
+
+              {/* Image Fallback Actions */}
+              {isImage && localAnalysisFailed && (
+                <>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={startLocalExtraction}
+                  >
+                    إعادة المحاولة محليًا
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!cloudConsent}
+                    onClick={startCloudExtraction}
+                  >
+                    استخدام التحليل المتقدم
+                  </button>
+                </>
+              )}
+
+              {/* PDF Cloud Flow */}
+              {isPdf && (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!file || !cloudConsent}
+                  onClick={startCloudExtraction}
+                >
+                  بدء تحليل الجدول (متقدم)
+                </button>
+              )}
+
+              {/* Default when no file selected */}
+              {!file && (
+                <button type="button" className="button" disabled>
+                  بدء تحليل الجدول
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -634,7 +874,9 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
                 animation: "spin 1s linear infinite"
               }}
             />
-            <p style={{ fontSize: "1.15rem", fontWeight: 800, margin: "0 0 8px" }}>{analyzingStage}</p>
+            <p data-testid="analyzing-stage" style={{ fontSize: "1.15rem", fontWeight: 800, margin: "0 0 8px" }}>
+              {analyzingStage}
+            </p>
             <p className="muted" style={{ margin: "0 0 20px" }}>
               يرجى الانتظار بضع ثوانٍ بينما يقوم النظام بقراءة المواد والمواعيد والقاعات بدقة…
             </p>
@@ -647,6 +889,31 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
         {/* STEP 3: REVIEW SCREEN */}
         {step === "review" && (
           <div>
+            {/* Analysis Source Badge */}
+            <div style={{ marginBottom: 12 }}>
+              <span
+                data-testid="analysis-source-badge"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  backgroundColor: analysisSource === "local" ? "rgba(16, 185, 129, 0.12)" : "rgba(99, 102, 241, 0.12)",
+                  color: analysisSource === "local" ? "var(--primary)" : "var(--accent)"
+                }}
+              >
+                <span>{analysisSource === "local" ? "🔒" : "☁️"}</span>
+                <span>
+                  {analysisSource === "local"
+                    ? "تم تحليل الصورة محليًا على جهازك"
+                    : "تم التحليل باستخدام الخدمة المتقدمة"}
+                </span>
+              </span>
+            </div>
+
             <p className="muted" style={{ margin: "0 0 16px" }}>
               تم استخراج <strong>{extractedCourses.length}</strong> مواد. يمكنك تعديل أي حقل، حذف أي مادة، أو إضافة مواد إضافية قبل الاعتماد.
             </p>

@@ -434,5 +434,35 @@ describe("TTU Schedule Semantic Parser (Phase 3)", () => {
       expect(adapted.draft.issues.some((i) => i.message.includes("وقت") || i.message.includes("توقيت"))).toBe(true);
       expect(adapted.draft.issues.some((i) => i.message.includes("قاعة"))).toBe(true);
     });
+
+    it("assigns courseId to all DraftSessions and provides course_${courseId}_name in confidence", () => {
+      const row = makeRow({
+        index: 0,
+        y0: 100,
+        y1: 150,
+        courseName: "هندسة البرمجيات",
+        meetingText: "ح ث 10:00 - 11:30",
+        roomText: "207 م"
+      });
+
+      const parsed = parseTtuScheduleSemantics(makeGeometry([row]));
+      const adapted = toScheduleExtractionResult(parsed);
+
+      const course = adapted.draft.courses[0];
+      const courseId = course.sessions[0]?.courseId;
+      expect(courseId).toBeDefined();
+      expect(typeof courseId).toBe("string");
+
+      // Every session in this course must have the same courseId
+      for (const session of course.sessions) {
+        expect(session.courseId).toBe(courseId);
+      }
+
+      // Review UI reads confidence using course_${courseId}_name
+      const retrievedConfidence = adapted.confidence[`course_${courseId}_name`];
+      expect(retrievedConfidence).toBeDefined();
+      expect(typeof retrievedConfidence).toBe("number");
+      expect(retrievedConfidence).toBeGreaterThan(0);
+    });
   });
 });

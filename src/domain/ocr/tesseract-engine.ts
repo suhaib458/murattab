@@ -128,6 +128,7 @@ export function mapTesseractResult(
 export class LocalOcrEngine {
   private worker: Tesseract.Worker | null = null;
   private initPromise: Promise<Tesseract.Worker> | null = null;
+  private isDisposed = false;
 
   /**
    * Lazily initialize the Tesseract worker.
@@ -139,6 +140,7 @@ export class LocalOcrEngine {
 
     if (this.initPromise) return this.initPromise;
 
+    this.isDisposed = false;
     this.initPromise = this.createWorker();
     return this.initPromise;
   }
@@ -157,11 +159,17 @@ export class LocalOcrEngine {
         gzip: true,
       });
 
+      if (this.isDisposed) {
+        await worker.terminate().catch(() => {});
+        throw new OcrError("OCR_INITIALIZATION_FAILED", "Engine was disposed during initialization.");
+      }
+
       this.worker = worker;
       return worker;
     } catch (err) {
       // Reset so the next call can retry
       this.initPromise = null;
+      if (err instanceof OcrError) throw err;
       throw new OcrError(
         "OCR_INITIALIZATION_FAILED",
         "Failed to initialize the local OCR engine.",
@@ -218,14 +226,28 @@ export class LocalOcrEngine {
 
   /**
    * Terminate the Tesseract worker and release resources.
-   * Safe to call multiple times.
+   * Safe to call multiple times or during in-progress initialization.
    */
   async dispose(): Promise<void> {
+    this.isDisposed = true;
     const worker = this.worker;
+    const pendingInit = this.initPromise;
     this.worker = null;
     this.initPromise = null;
+
     if (worker) {
-      await worker.terminate();
+      try {
+        await worker.terminate();
+      } catch {
+        // Ignore termination errors
+      }
+    } else if (pendingInit) {
+      try {
+        const initializedWorker = await pendingInit;
+        await initializedWorker.terminate();
+      } catch {
+        // Ignore errors if initialization aborted
+      }
     }
   }
 }

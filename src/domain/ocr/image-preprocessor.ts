@@ -224,29 +224,57 @@ export async function preprocessImage(input: Blob): Promise<PreprocessedImage> {
   const targetW = Math.round(origW * scale);
   const targetH = Math.round(origH * scale);
 
-  // Create off-screen canvas
-  const canvas = new OffscreenCanvas(targetW, targetH);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Failed to create canvas context.");
+  // Create canvas (prefers OffscreenCanvas, falls back to DOM canvas in WebKit/Safari)
+  let blob: Blob;
+
+  if (typeof OffscreenCanvas !== "undefined" && typeof (OffscreenCanvas.prototype as any).convertToBlob === "function") {
+    const canvas = new OffscreenCanvas(targetW, targetH);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Failed to create canvas context.");
+    }
+
+    ctx.drawImage(source, 0, 0, targetW, targetH);
+
+    if ("close" in source && typeof (source as any).close === "function") {
+      (source as any).close();
+    }
+
+    const imageData = ctx.getImageData(0, 0, targetW, targetH);
+    toGreyscale(imageData.data);
+    enhanceContrast(imageData.data);
+    ctx.putImageData(imageData, 0, 0);
+
+    blob = await canvas.convertToBlob({ type: "image/png" });
+  } else if (typeof document !== "undefined" && typeof document.createElement === "function") {
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new OcrError("OCR_IMAGE_DECODE_FAILED", "Failed to create canvas context.");
+    }
+
+    ctx.drawImage(source, 0, 0, targetW, targetH);
+
+    if ("close" in source && typeof (source as any).close === "function") {
+      (source as any).close();
+    }
+
+    const imageData = ctx.getImageData(0, 0, targetW, targetH);
+    toGreyscale(imageData.data);
+    enhanceContrast(imageData.data);
+    ctx.putImageData(imageData, 0, 0);
+
+    blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => {
+        if (b) resolve(b);
+        else reject(new Error("Canvas toBlob failed"));
+      }, "image/png");
+    });
+  } else {
+    throw new OcrError("OCR_IMAGE_DECODE_FAILED", "No canvas implementation available in this environment.");
   }
-
-  // Draw image at target size
-  ctx.drawImage(source, 0, 0, targetW, targetH);
-
-  // Release ImageBitmap memory if applicable
-  if ("close" in source && typeof source.close === "function") {
-    source.close();
-  }
-
-  // Get pixel data and apply preprocessing
-  const imageData = ctx.getImageData(0, 0, targetW, targetH);
-  toGreyscale(imageData.data);
-  enhanceContrast(imageData.data);
-  ctx.putImageData(imageData, 0, 0);
-
-  // Export as PNG Blob
-  const blob = await canvas.convertToBlob({ type: "image/png" });
 
   return {
     blob,
