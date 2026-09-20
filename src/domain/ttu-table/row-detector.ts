@@ -2,9 +2,10 @@
  * TTU Table Row Detector.
  *
  * Partitions the table body vertically into logical course rows using:
- *   1. Primary anchor: Course name entries in the courseName column.
- *   2. Secondary / fallback: Vertical gap clustering across columns.
- *   3. Conservative bottom cutoff: Excludes footer text, signatures, or print metadata.
+ *   1. Course-name visual lines as the primary textual anchor.
+ *   2. Corroborated section + credit-hours metadata as row-boundary evidence.
+ *   3. Secondary / fallback vertical gap clustering across columns.
+ *   4. Conservative bottom cutoff: Excludes footer text, signatures, or print metadata.
  *
  * Multi-line sessions (e.g. Lecture + Lab for the same course) remain in ONE row.
  */
@@ -72,47 +73,161 @@ export function detectRowBands(
   const courseAnchors: CourseAnchor[] = [];
 
   if (courseCol) {
-    // Collect words strictly inside the courseName column
+    // Collect words strictly inside the courseName column.
+    //
+    // IMPORTANT: course titles may span multiple visual lines. Grouping those
+    // lines by vertical gap alone is unsafe because the next course can start
+    // only a few pixels below the previous title. To prevent adjacent courses
+    // from collapsing into one row, we also derive row-boundary evidence from
+    // the single-value metadata columns (section + credit hours).
     const courseWords = bodyWords
       .filter((w) => {
         const xCenter = (w.bbox.x0 + w.bbox.x1) / 2;
         return xCenter >= courseCol.xStart && xCenter <= courseCol.xEnd;
       })
-      .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+      .sort((a, b) => {
+        const ay = (a.bbox.y0 + a.bbox.y1) / 2;
+        const by = (b.bbox.y0 + b.bbox.y1) / 2;
+        return ay - by;
+      });
 
-    // Group adjacent words vertically into course title clusters
-    // Tolerance: words within 0.8 * medianLineHeight gap belong to the same course title
-    const lineGapTol = Math.max(1, medianLineHeight * 0.8);
+    interface CourseLine {
+      words: OcrWord[];
+      bbox: OcrBoundingBox;
+      yCenter: number;
+    }
 
-    let currentGroup: OcrWord[] = [];
+    // First build visual text lines in the course-name column. This keeps words
+    // on the same printed line together without deciding course ownership yet.
+    const courseLines: CourseLine[] = [];
+    const sameLineTol = Math.max(2, medianLineHeight * 0.45);
 
     for (const w of courseWords) {
-      if (currentGroup.length === 0) {
-        currentGroup.push(w);
+      const wordCenter = (w.bbox.y0 + w.bbox.y1) / 2;
+      const last = courseLines[courseLines.length - 1];
+
+      if (last && Math.abs(wordCenter - last.yCenter) <= sameLineTol) {
+        last.words.push(w);
+        last.bbox = unionBboxes(last.words.map((cw) => cw.bbox));
+        last.yCenter = (last.bbox.y0 + last.bbox.y1) / 2;
       } else {
-        const prevBottom = Math.max(...currentGroup.map((cw) => cw.bbox.y1));
-        if (w.bbox.y0 - prevBottom <= lineGapTol) {
-          currentGroup.push(w);
-        } else {
-          const bbox = unionBboxes(currentGroup.map((cw) => cw.bbox));
-          courseAnchors.push({
-            words: currentGroup,
-            bbox,
-            yCenter: (bbox.y0 + bbox.y1) / 2,
-          });
-          currentGroup = [w];
-        }
+        courseLines.push({
+          words: [w],
+          bbox: { ...w.bbox },
+          yCenter: wordCenter,
+        });
       }
     }
 
-    if (currentGroup.length > 0) {
-      const bbox = unionBboxes(currentGroup.map((cw) => cw.bbox));
+    // Derive conservative row-center cues from columns that should contain a
+    // single value per course. When both columns agree on a vertical cluster,
+    // the midpoint between two adjacent clusters is a strong row boundary.
+    const metadataKeys = ["section", "creditHours"] as const;
+    const metadataPoints: Array<{ y: number; key: (typeof metadataKeys)[number] }> = [];
+
+    for (const key of metadataKeys) {
+      const col = columns.find((c) => c.key === key);
+      if (!col) continue;
+
+      for (const w of bodyWords) {
+        const xCenter = (w.bbox.x0 + w.bbox.x1) / 2;
+        if (xCenter < col.xStart || xCenter > col.xEnd) continue;
+        if (!w.text.trim()) continue;
+
+        metadataPoints.push({
+          y: (w.bbox.y0 + w.bbox.y1) / 2,
+          key,
+        });
+      }
+    }
+
+    metadataPoints.sort((a, b) => a.y - b.y);
+
+    const metadataClusterTol = Math.max(2, medianLineHeight * 0.7);
+    const metadataClusters: Array<{
+      ys: number[];
+      keys: Set<(typeof metadataKeys)[number]>;
+    }> = [];
+
+    for (const point of metadataPoints) {
+      const last = metadataClusters[metadataClusters.length - 1];
+      const lastCenter =
+        last && last.ys.length > 0
+          ? last.ys.reduce((sum, y) => sum + y, 0) / last.ys.length
+          : Number.NaN;
+
+      if (last && Math.abs(point.y - lastCenter) <= metadataClusterTol) {
+        last.ys.push(point.y);
+        last.keys.add(point.key);
+      } else {
+        metadataClusters.push({
+          ys: [point.y],
+          keys: new Set([point.key]),
+        });
+      }
+    }
+
+    // Prefer clusters corroborated by BOTH metadata columns. A single stray
+    // OCR token in one metadata column must not manufacture a row boundary.
+    const corroboratedCenters = metadataClusters
+      .filter((cluster) => cluster.keys.size >= 2)
+      .map((cluster) => cluster.ys.reduce((sum, y) => sum + y, 0) / cluster.ys.length)
+      .sort((a, b) => a - b);
+
+    const metadataBoundaries: number[] = [];
+    for (let i = 0; i < corroboratedCenters.length - 1; i++) {
+      metadataBoundaries.push((corroboratedCenters[i] + corroboratedCenters[i + 1]) / 2);
+    }
+
+    const metadataZoneFor = (y: number): number => {
+      let zone = 0;
+      for (const boundary of metadataBoundaries) {
+        if (y > boundary) zone++;
+        else break;
+      }
+      return zone;
+    };
+
+    // Now group adjacent VISUAL LINES into course-title anchors. Vertical gap
+    // remains the fallback, but a corroborated metadata boundary always wins.
+    const lineGapTol = Math.max(1, medianLineHeight * 0.8);
+    let currentLines: CourseLine[] = [];
+
+    const flushCurrentLines = () => {
+      if (currentLines.length === 0) return;
+      const words = currentLines.flatMap((line) => line.words);
+      const bbox = unionBboxes(words.map((cw) => cw.bbox));
       courseAnchors.push({
-        words: currentGroup,
+        words,
         bbox,
         yCenter: (bbox.y0 + bbox.y1) / 2,
       });
+      currentLines = [];
+    };
+
+    for (const line of courseLines) {
+      if (currentLines.length === 0) {
+        currentLines.push(line);
+        continue;
+      }
+
+      const prevLine = currentLines[currentLines.length - 1];
+      const currentBottom = Math.max(...currentLines.map((l) => l.bbox.y1));
+      const gap = line.bbox.y0 - currentBottom;
+
+      const crossedMetadataBoundary =
+        metadataBoundaries.length > 0 &&
+        metadataZoneFor(prevLine.yCenter) !== metadataZoneFor(line.yCenter);
+
+      if (!crossedMetadataBoundary && gap <= lineGapTol) {
+        currentLines.push(line);
+      } else {
+        flushCurrentLines();
+        currentLines.push(line);
+      }
     }
+
+    flushCurrentLines();
   }
 
   // Filter out any anchor candidate that belongs to the footer (print metadata, page numbers, notes)
