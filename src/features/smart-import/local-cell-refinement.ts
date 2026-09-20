@@ -708,30 +708,16 @@ export function scoreMeetingText(text: string, confidence: number): number {
   if (invertedRanges > 0) score -= invertedRanges * 10;
   if (validRanges === 0 && invertedRanges === 0) score -= 15;
 
-  // 2. Day token analysis (tokens outside time pattern)
-  const nonTime = clean.replace(timePattern, " ").trim();
-  const dayTokens = nonTime.split(/\s+/).filter(Boolean);
-
-  let canonicalDaysCount = 0;
-  let unexplainedPenalty = 0;
-
-  for (const token of dayTokens) {
-    // Strip common punctuation
-    const stripped = token.replace(/[,،\-–—]/g, "");
-    if (!stripped) continue;
-
-    for (const char of [...stripped]) {
-      if (TTU_DAY_CODES.includes(char as any)) {
-        canonicalDaysCount++;
-      } else {
-        // Unexplained character (e.g. "ت", "م", "ا", "©", "&", "2", "#")
-        unexplainedPenalty++;
-      }
-    }
-  }
+  // 2. Day-token analysis uses the SAME strict parser as final semantics.
+  // This prevents a candidate such as "نار" from scoring as two valid days
+  // merely because it contains the letters ن and ر.
+  const dayResult = parseTtuDayCodes(clean, confidence);
+  const canonicalDaysCount = dayResult.days.length;
+  const ambiguousCount = dayResult.issues.filter((issue) => issue.code === "DAY_TOKEN_AMBIGUOUS").length;
 
   score += canonicalDaysCount * 10;
-  score -= unexplainedPenalty * 8;
+  score -= ambiguousCount * 12;
+  if (canonicalDaysCount === 0) score -= 10;
   score += Math.round(confidence * 10);
 
   return score;
@@ -1138,27 +1124,51 @@ export async function refineTableCells(
     const scaleFactor = 1 / TARGET_CELL_SCALE;
 
     if (p.columnKey === "room") {
-      const ocrResult = await engine.recognizeImage(cropPreprocessed.blob, {
-        pageSegMode: "6",
-        skipPreprocessing: true
-      });
+      // Evaluate a bounded set of segmentation modes. Room OCR is especially
+      // vulnerable to ICT↔161 and DS-ICT↔05-167 substitutions, so a single
+      // PSM result is not authoritative.
+      const roomResults = await Promise.all([
+        engine.recognizeImage(cropPreprocessed.blob, { pageSegMode: "6", skipPreprocessing: true }),
+        engine.recognizeImage(cropPreprocessed.blob, { pageSegMode: "11", skipPreprocessing: true }),
+        engine.recognizeImage(cropPreprocessed.blob, { pageSegMode: "13", skipPreprocessing: true }),
+      ]);
 
-      // Map words back to original image coordinates
-      const mappedWords: OcrWord[] = ocrResult.words.map((w) => ({
-        ...w,
-        bbox: {
-          x0: Math.round(cropBbox.x0 + w.bbox.x0 * scaleFactor),
-          y0: Math.round(cropBbox.y0 + w.bbox.y0 * scaleFactor),
-          x1: Math.round(cropBbox.x0 + w.bbox.x1 * scaleFactor),
-          y1: Math.round(cropBbox.y0 + w.bbox.y1 * scaleFactor),
+      const mapRoomWords = (result: (typeof roomResults)[number]): OcrWord[] =>
+        result.words.map((w) => ({
+          ...w,
+          bbox: {
+            x0: Math.round(cropBbox.x0 + w.bbox.x0 * scaleFactor),
+            y0: Math.round(cropBbox.y0 + w.bbox.y0 * scaleFactor),
+            x1: Math.round(cropBbox.x0 + w.bbox.x1 * scaleFactor),
+            y1: Math.round(cropBbox.y0 + w.bbox.y1 * scaleFactor),
+          }
+        }));
+
+      const roomCandidates = roomResults.map((result) =>
+        groupRoomEntities(mapRoomWords(result), { x0: 0, y0: 0 })
+      );
+
+      // Pick the strongest candidate under the strict verified-room grammar.
+      // An invalid candidate receives a negative score and cannot win merely
+      // because Tesseract reports high OCR confidence.
+      let roomEntities = roomCandidates[0] ?? [];
+      let bestRoomScore = scoreRoomEntities(roomEntities);
+      for (let i = 1; i < roomCandidates.length; i++) {
+        const candidateScore = scoreRoomEntities(roomCandidates[i]);
+        if (candidateScore > bestRoomScore) {
+          roomEntities = roomCandidates[i];
+          bestRoomScore = candidateScore;
         }
-      }));
+      }
 
-      const roomEntities = groupRoomEntities(mappedWords, { x0: 0, y0: 0 });
       const baselineEntities = extractRoomEntitiesFromCell(cell, cropBbox);
       const arbitration = arbitrateRoomCandidates(baselineEntities, roomEntities);
 
-      console.log(`[Phase 5B Refinement] Room Row ${p.rowIndex}: baseline="${baselineText}" => candidate=${roomEntities.map(e => e.text).join(" | ")}, replaced=${arbitration.replaced}, reason=${arbitration.reason}`);
+      console.log(
+        `[Phase 5B Refinement] Room Row ${p.rowIndex}: baseline="${baselineText}" => candidates=${roomCandidates
+          .map((entities) => entities.map((e) => e.text).join(" | "))
+          .join(" || ")}; chosen=${roomEntities.map((e) => e.text).join(" | ")}, replaced=${arbitration.replaced}, reason=${arbitration.reason}`
+      );
 
       // Arbitration is authoritative. Never resurrect a candidate that was
       // explicitly rejected when baseline evidence is empty.
@@ -1216,6 +1226,10 @@ export async function refineTableCells(
         pageSegMode: "11",
         skipPreprocessing: true
       });
+      const resPsm7 = await engine.recognizeImage(cropPreprocessed.blob, {
+        pageSegMode: "7",
+        skipPreprocessing: true
+      });
       const resPsm13 = await engine.recognizeImage(cropPreprocessed.blob, {
         pageSegMode: "13",
         skipPreprocessing: true
@@ -1259,12 +1273,16 @@ export async function refineTableCells(
 
       // 2. Single-session cell: arbitrate between PSM 6, PSM 13, and baseline
       const textPsm6 = resPsm6.text.trim();
+      const textPsm7 = resPsm7.text.trim();
       const textPsm13 = resPsm13.text.trim();
-      const score6 = scoreMeetingText(textPsm6, resPsm6.confidence);
-      const score13 = scoreMeetingText(textPsm13, resPsm13.confidence);
+      const meetingVariants = [
+        { result: resPsm6, text: textPsm6, score: scoreMeetingText(textPsm6, resPsm6.confidence) },
+        { result: resPsm7, text: textPsm7, score: scoreMeetingText(textPsm7, resPsm7.confidence) },
+        { result: resPsm13, text: textPsm13, score: scoreMeetingText(textPsm13, resPsm13.confidence) },
+      ].sort((a, b) => b.score - a.score);
 
-      const bestRes = score13 > score6 ? resPsm13 : resPsm6;
-      const bestText = score13 > score6 ? textPsm13 : textPsm6;
+      const bestRes = meetingVariants[0].result;
+      const bestText = meetingVariants[0].text;
 
       const arbitration = arbitrateMeetingCandidate(
         baselineText,
@@ -1273,7 +1291,7 @@ export async function refineTableCells(
         bestRes.confidence
       );
 
-      console.log(`[Phase 5B Refinement] Meeting Row ${p.rowIndex}: baseline="${baselineText}", PSM6="${textPsm6}", PSM13="${textPsm13}" => best="${bestText}", replaced=${arbitration.replaced}, reason=${arbitration.reason}`);
+      console.log(`[Phase 5B Refinement] Meeting Row ${p.rowIndex}: baseline="${baselineText}", PSM6="${textPsm6}", PSM7="${textPsm7}", PSM13="${textPsm13}" => best="${bestText}", replaced=${arbitration.replaced}, reason=${arbitration.reason}`);
 
       if (arbitration.replaced) {
         const segments: TtuCellSegment[] =
