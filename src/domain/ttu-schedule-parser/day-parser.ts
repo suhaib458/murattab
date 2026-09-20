@@ -44,13 +44,19 @@ const FULL_DAY_NAMES: Readonly<Record<string, DayCode>> = {
   خميس: "خ",
 };
 
+const BENIGN_DAY_DELIMITERS = new Set([
+  ",", "،", ";", "؛", "|", "/", "\\", "(", ")", "[", "]", "{", "}"
+]);
+
 function cleanDayToken(token: string): string {
-  return token
+  const chars = [...token
     .replace(/[\u200E\u200F\u202A-\u202E\u061C]/g, "")
-    .trim()
-    .replace(/^[^\p{L}\p{N}]+/gu, "")
-    .replace(/[^\p{L}\p{N}]+$/gu, "")
-    .replace(/[,،]/g, "");
+    .trim()];
+
+  while (chars.length > 0 && BENIGN_DAY_DELIMITERS.has(chars[0])) chars.shift();
+  while (chars.length > 0 && BENIGN_DAY_DELIMITERS.has(chars[chars.length - 1])) chars.pop();
+
+  return chars.join("").trim();
 }
 
 function pushUniqueDay(days: DayCode[], seen: Set<DayCode>, code: DayCode): void {
