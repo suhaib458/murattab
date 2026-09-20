@@ -174,7 +174,44 @@ p { line-height: 1.65; }
 /* -------------------------------------------------------------------------
    4. Layout shell
    ------------------------------------------------------------------------- */
+.campus-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  background-image: url("/branding/ttu-campus-background.webp");
+  background-repeat: no-repeat;
+  background-position: center 48%;
+  background-size: cover;
+  opacity: 0.085;
+  filter: saturate(0.72) contrast(0.92);
+  transform: scale(1.02);
+  transform-origin: center;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.28) 0%,
+    #000 16%,
+    #000 74%,
+    rgba(0, 0, 0, 0.16) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.28) 0%,
+    #000 16%,
+    #000 74%,
+    rgba(0, 0, 0, 0.16) 100%
+  );
+}
+
+[data-theme="dark"] .campus-background {
+  opacity: 0.055;
+  filter: saturate(0.5) brightness(0.72) contrast(0.9);
+}
+
 .app {
+  position: relative;
+  z-index: 1;
   max-width: var(--container-max);
   margin: auto;
   min-height: 100vh;
@@ -182,6 +219,16 @@ p { line-height: 1.65; }
 }
 
 @media (max-width: 700px) {
+  .campus-background {
+    background-position: 52% center;
+    opacity: 0.072;
+    transform: scale(1.04);
+  }
+
+  [data-theme="dark"] .campus-background {
+    opacity: 0.045;
+  }
+
   .app { padding: calc(16px + var(--safe-top)) 14px var(--bottom-nav-extra); }
 }
 
