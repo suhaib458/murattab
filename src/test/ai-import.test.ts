@@ -382,10 +382,10 @@ describe("Smart Schedule Import - Atomic Batch Save in Repository", () => {
 });
 
 describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", () => {
-  it("defaults to gemini-3.6-flash as the centralized model", () => {
-    expect(DEFAULT_GEMINI_MODEL).toBe("gemini-3.6-flash");
+  it("defaults to gemini-3.8-flash as the centralized model", () => {
+    expect(DEFAULT_GEMINI_MODEL).toBe("gemini-3.8-flash");
     const extractor = new GeminiScheduleExtractor({ apiKey: "fake-key" });
-    expect(extractor.model).toBe("gemini-3.6-flash");
+    expect(extractor.model).toBe("gemini-3.8-flash");
   });
 
   it("allows overriding model via options or environment variable", () => {
@@ -396,10 +396,13 @@ describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", ()
     expect(customExtractor.model).toBe("custom-model");
   });
 
-  it("targets the exact gemini-3.6-flash generateContent endpoint", async () => {
+  it("targets Gemini 3.8 Flash and authenticates with x-goog-api-key", async () => {
     let capturedUrl = "";
-    const mockFetch = (async (url: string | URL | Request) => {
+    let capturedHeaders: Record<string, string> = {};
+
+    const mockFetch = (async (url: string | URL | Request, init?: RequestInit) => {
       capturedUrl = url.toString();
+      capturedHeaders = init?.headers as Record<string, string>;
       return new Response(
         JSON.stringify({
           candidates: [
@@ -425,8 +428,9 @@ describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", ()
       mimeType: "image/png"
     });
 
-    expect(capturedUrl).toContain("models/gemini-3.6-flash:generateContent");
-    expect(capturedUrl).toContain("key=test-api-key");
+    expect(capturedUrl).toContain("models/gemini-3.8-flash:generateContent");
+    expect(capturedUrl).not.toContain("test-api-key");
+    expect(capturedHeaders["x-goog-api-key"]).toBe("test-api-key");
   });
 
   it("throws GEMINI_MODEL_UNAVAILABLE when API responds with 404", async () => {
@@ -686,11 +690,11 @@ describe("Smart Schedule Import - Timeout Budget (3-attempt policy must actually
     expect(resolveProviderTimeoutMs()).toBe(12345);
   });
 
-  it("resolveProviderTimeoutMs defaults to 60_000 when env is unset and no option is given", async () => {
+  it("resolveProviderTimeoutMs defaults to 50_000 when env is unset and no option is given", async () => {
     delete process.env.AI_PROVIDER_TIMEOUT_MS;
     const { resolveProviderTimeoutMs, DEFAULT_AI_PROVIDER_TIMEOUT_MS } = await import("@/domain/ai/gemini-extractor");
     expect(resolveProviderTimeoutMs()).toBe(DEFAULT_AI_PROVIDER_TIMEOUT_MS);
-    expect(DEFAULT_AI_PROVIDER_TIMEOUT_MS).toBe(60_000);
+    expect(DEFAULT_AI_PROVIDER_TIMEOUT_MS).toBe(50_000);
   });
 
   it("explicit timeoutMs option wins over env var", async () => {
