@@ -735,6 +735,7 @@ describe("Smart Schedule Import - Route classification of repeated 503 vs real t
 
     const request = new Request("http://localhost:3002/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -760,6 +761,7 @@ describe("Smart Schedule Import - Route classification of repeated 503 vs real t
 
     const request = new Request("http://localhost:3002/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
