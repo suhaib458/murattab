@@ -145,7 +145,15 @@ self.addEventListener("notificationclick", (event) => {
   const path = event.notification.data && typeof event.notification.data.url === "string"
     ? event.notification.data.url
     : "/schedule";
-  const targetUrl = new URL(path, self.location.origin).href;
+  let targetUrl = new URL("/schedule", self.location.origin).href;
+  try {
+    const candidate = new URL(path, self.location.origin);
+    if (candidate.origin === self.location.origin) {
+      targetUrl = candidate.href;
+    }
+  } catch {
+    // Keep the safe same-origin fallback.
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {

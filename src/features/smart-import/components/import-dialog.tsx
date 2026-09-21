@@ -250,6 +250,9 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
       const res = await fetch("/api/schedule/extract", {
         method: "POST",
+        headers: {
+          "X-Murattab-Client": "web"
+        },
         body: formData,
         signal: controller.signal
       });

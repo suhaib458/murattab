@@ -85,6 +85,19 @@ describe("إشعارات الجهاز", () => {
     expect(safeTokenHashMatches(hash, "b".repeat(43))).toBe(false);
   });
 
+  it("يرفض مسارات الإشعارات الخارجية أو الشبيهة بمسار protocol-relative", () => {
+    const base = {
+      deviceId: "44444444-4444-4444-8444-444444444444",
+      deviceToken: "a".repeat(43),
+      title: "تنبيه",
+      body: "اختبار"
+    };
+
+    expect(PushBroadcastRequestSchema.safeParse({ ...base, url: "/schedule" }).success).toBe(true);
+    expect(PushBroadcastRequestSchema.safeParse({ ...base, url: "//evil.example" }).success).toBe(false);
+    expect(PushBroadcastRequestSchema.safeParse({ ...base, url: "/\\evil.example" }).success).toBe(false);
+  });
+
   it("يتحقق من محتوى الإشعار العام وحدوده", () => {
     const parsed = PushBroadcastRequestSchema.parse({
       deviceId: "44444444-4444-4444-8444-444444444444",

@@ -13,6 +13,19 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function isTrustedMurattabRequest(request: Request): boolean {
+  const expectedOrigin = new URL(request.url).origin;
+  const origin = request.headers.get("origin");
+  if (origin && origin !== expectedOrigin) return false;
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return false;
+
+  // A non-safelisted custom header forces cross-origin browsers through CORS
+  // preflight, while Murattab's own client sends it directly same-origin.
+  return request.headers.get("x-murattab-client") === "web";
+}
+
 // Allows overriding extractor during integration tests if needed
 let defaultExtractor: ScheduleExtractor | null = null;
 export function setTestScheduleExtractor(extractor: ScheduleExtractor | null) {
@@ -20,6 +33,13 @@ export function setTestScheduleExtractor(extractor: ScheduleExtractor | null) {
 }
 
 export async function POST(request: Request) {
+  if (!isTrustedMurattabRequest(request)) {
+    return NextResponse.json(
+      { success: false, error: "طلب التحليل غير مسموح من هذا المصدر." },
+      { status: 403, headers: { "Cache-Control": "private, no-store" } }
+    );
+  }
+
   try {
     const formData = await request.formData().catch(() => null);
     if (!formData) {
@@ -101,7 +121,10 @@ export async function POST(request: Request) {
       }
     );
   } catch (error: any) {
-    console.error("Schedule extraction error:", error);
+    console.error("Schedule extraction error:", {
+      name: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : "UNKNOWN"
+    });
 
     if (error instanceof AiUsageGuardError || error?.message === "AI_USAGE_GUARD_LIMITED") {
       const retryAfterSeconds =

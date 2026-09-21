@@ -189,11 +189,11 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
         }
 
         if (!response.ok) {
-          const errorText = await response.text().catch(() => "");
+          // Do not persist provider response bodies in logs: they can contain
+          // request-specific diagnostic details derived from a student's file.
+          await response.text().catch(() => "");
           console.error(
-            `Gemini API error [${currentModel}] (candidate ${attempt + 1}/${this.models.length}):`,
-            response.status,
-            errorText
+            `Gemini API error [${currentModel}] (candidate ${attempt + 1}/${this.models.length}): status ${response.status}`
           );
 
           if (response.status === 401 || response.status === 403) {
@@ -255,7 +255,13 @@ export class GeminiScheduleExtractor implements ScheduleExtractor {
 
         const validated = RawExtractionResponseSchema.safeParse(parsedJson);
         if (!validated.success) {
-          console.warn("Gemini raw extraction parse issue:", validated.error);
+          console.warn("Gemini raw extraction parse issue:", {
+            issueCount: validated.error.issues.length,
+            issues: validated.error.issues.slice(0, 20).map((issue) => ({
+              code: issue.code,
+              path: issue.path
+            }))
+          });
           const fallbackRaw = {
             courses: Array.isArray((parsedJson as any)?.courses)
               ? (parsedJson as any).courses

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { POST, setTestScheduleExtractor } from "@/app/api/schedule/extract/route";
 import type { ScheduleExtractionResult, ScheduleExtractor } from "@/domain/models";
+import { resetAiUsageGuardForTests } from "@/server/ai/usage-guard";
 
 describe("API Route Handler: POST /api/schedule/extract", () => {
   const originalKey = process.env.XKIRO_API_KEY;
 
   beforeEach(() => {
+    resetAiUsageGuardForTests();
     delete process.env.XKIRO_API_KEY;
     delete process.env.GEMINI_API_KEY;
     setTestScheduleExtractor(null);
@@ -28,6 +30,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -45,6 +48,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -64,6 +68,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -92,6 +97,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -119,6 +125,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -138,6 +145,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -188,6 +196,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -217,6 +226,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
       const request = new Request("http://localhost:3000/api/schedule/extract", {
         method: "POST",
+        headers: { "X-Murattab-Client": "web" },
         body: formData
       });
 
@@ -248,6 +258,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
       const request = new Request("http://localhost:3000/api/schedule/extract", {
         method: "POST",
+        headers: { "X-Murattab-Client": "web" },
         body: formData
       });
 
@@ -257,7 +268,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
       const body = await response.json();
       expect(body.success).toBe(false);
       expect(body.error).toBe(
-        "خدمة التحليل الذكي مشغولة حاليًا بسبب ضغط مرتفع. يرجى المحاولة مرة أخرى بعد قليل."
+        "خدمة التحليل الذكي غير متاحة مؤقتًا أو مشغولة لدى مزود الخدمة. حاول مرة أخرى بعد قليل."
       );
     }
   });
@@ -279,6 +290,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
       const request = new Request("http://localhost:3000/api/schedule/extract", {
         method: "POST",
+        headers: { "X-Murattab-Client": "web" },
         body: formData
       });
 
@@ -309,6 +321,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
@@ -336,6 +349,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const request = new Request("http://localhost:3000/api/schedule/extract", {
       method: "POST",
+      headers: { "X-Murattab-Client": "web" },
       body: formData
     });
 
