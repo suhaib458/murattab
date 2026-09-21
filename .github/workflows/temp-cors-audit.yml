@@ -1,0 +1,22 @@
+name: Temporary CORS audit
+
+on:
+  push:
+    branches:
+      - audit/security-post-hardening-2026-09-21
+
+permissions:
+  contents: read
+
+jobs:
+  cors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public CORS headers
+        shell: bash
+        run: |
+          for path in "/" "/sw.js" "/api/push/config" "/api/schedule/extract"; do
+            echo "=== $path ==="
+            curl -sS -I "https://murattab-pi.vercel.app$path" | grep -iE '^(HTTP/|access-control-|vary:|content-type:)' || true
+          done
