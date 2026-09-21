@@ -1,5 +1,7 @@
 import { PushSubscribeRequestSchema } from "@/domain/push";
 import {
+  grantPushAdminDevice,
+  hasValidPushAdminSession,
   hashDeviceToken,
   jsonError,
   requestOriginIsAllowed,
@@ -55,6 +57,10 @@ export async function POST(request: Request) {
       }),
       expectJson: false
     });
+
+    if (await hasValidPushAdminSession(request)) {
+      await grantPushAdminDevice(deviceId);
+    }
 
     return Response.json({ ok: true });
   } catch (error) {
