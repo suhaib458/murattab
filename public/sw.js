@@ -1,5 +1,5 @@
-const SHELL_CACHE = "murattab-shell-v3";
-const RUNTIME_CACHE = "murattab-runtime-v3";
+const SHELL_CACHE = "murattab-shell-v4";
+const RUNTIME_CACHE = "murattab-runtime-v4";
 const PRECACHE_OFFLINE = ["/offline", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -110,5 +110,52 @@ self.addEventListener("fetch", (event) => {
         const cached = await caches.match(request);
         return cached || Response.error();
       })
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "لديك تذكير جديد من مرتب." };
+  }
+
+  const title = typeof payload.title === "string" ? payload.title : "مرتب";
+  const body = typeof payload.body === "string" ? payload.body : "لديك تذكير جديد.";
+  const url = typeof payload.url === "string" && payload.url.startsWith("/") ? payload.url : "/schedule";
+  const tag = typeof payload.tag === "string" ? payload.tag : "murattab-reminder";
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      dir: "rtl",
+      lang: "ar",
+      tag,
+      renotify: true,
+      data: { url }
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = event.notification.data && typeof event.notification.data.url === "string"
+    ? event.notification.data.url
+    : "/schedule";
+  const targetUrl = new URL(path, self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          if ("navigate" in client) await client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
+    })
   );
 });

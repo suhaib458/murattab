@@ -29,6 +29,7 @@ import { Splash } from "@/components/shared/splash";
 import { CourseDialog } from "@/components/shared/course-dialog";
 import { RestoreDialog } from "@/components/shared/restore-dialog";
 import { MurattabProvider, type MurattabContextValue } from "@/components/murattab-context";
+import { syncPushReminders } from "@/features/notifications/push-client";
 
 const repo = new LocalScheduleRepository();
 
@@ -242,6 +243,13 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
       }
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (!data || !online) return;
+    void syncPushReminders(data).catch((error: unknown) => {
+      console.warn("Unable to sync push reminders:", error);
+    });
+  }, [data, online]);
 
   const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
 
