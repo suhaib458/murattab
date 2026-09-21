@@ -9,6 +9,11 @@ export const PushSubscriptionPayloadSchema = z.object({
   })
 });
 
+const LocalAppPathSchema = z
+  .string()
+  .max(300)
+  .regex(/^\/(?!\/)[^\\\r\n]*$/, "Push URL must be a same-origin app path");
+
 const DeviceCredentialsSchema = z.object({
   deviceId: z.uuid(),
   deviceToken: z.string().min(32).max(256)
@@ -23,7 +28,7 @@ export const PushReminderSchema = z.object({
   dueAt: z.iso.datetime(),
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(240),
-  url: z.string().startsWith("/").max(300)
+  url: LocalAppPathSchema
 });
 
 export const PushSyncRequestSchema = DeviceCredentialsSchema.extend({
@@ -35,7 +40,7 @@ export const PushDeviceRequestSchema = DeviceCredentialsSchema;
 export const PushBroadcastRequestSchema = DeviceCredentialsSchema.extend({
   title: z.string().trim().min(1).max(120),
   body: z.string().trim().min(1).max(240),
-  url: z.string().startsWith("/").max(300).default("/")
+  url: LocalAppPathSchema.default("/")
 });
 
 export type PushReminder = z.infer<typeof PushReminderSchema>;
