@@ -30,6 +30,9 @@ create index if not exists push_reminders_due_pending_idx
   on public.push_reminders (due_at)
   where status in ('pending', 'processing');
 
+create index if not exists push_reminders_device_id_idx
+  on public.push_reminders (device_id);
+
 alter table public.push_devices enable row level security;
 alter table public.push_reminders enable row level security;
 
