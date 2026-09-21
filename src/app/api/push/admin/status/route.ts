@@ -2,6 +2,9 @@ import { PushDeviceRequestSchema } from "@/domain/push";
 import { checkPushRateLimit } from "@/server/push/rate-limit";
 import {
   authenticatePushDevice,
+  grantPushAdminDevice,
+  hasValidPushAdminSession,
+  issuePushAdminSession,
   requestOriginIsAllowed,
   supabaseRest
 } from "@/server/push/supabase-rest";
@@ -19,10 +22,28 @@ export async function POST(request: Request) {
 
     const { deviceId, deviceToken } = parsed.data;
     await authenticatePushDevice(deviceId, deviceToken);
-    const rows = await supabaseRest<Array<{ device_id: string }>>(
+
+    let rows = await supabaseRest<Array<{ device_id: string }>>(
       `push_admin_devices?device_id=eq.${encodeURIComponent(deviceId)}&select=device_id&limit=1`
     );
-    return Response.json({ admin: Boolean(rows[0]) });
+    let admin = Boolean(rows[0]);
+    const hasAdminSession = await hasValidPushAdminSession(request);
+
+    if (!admin && hasAdminSession) {
+      await grantPushAdminDevice(deviceId);
+      rows = [{ device_id: deviceId }];
+      admin = true;
+    }
+
+    if (!admin) return Response.json({ admin: false });
+
+    if (hasAdminSession) return Response.json({ admin: true });
+
+    const cookie = await issuePushAdminSession(deviceId);
+    return Response.json(
+      { admin: true },
+      { headers: { "Set-Cookie": cookie } }
+    );
   } catch {
     return Response.json({ admin: false });
   }
