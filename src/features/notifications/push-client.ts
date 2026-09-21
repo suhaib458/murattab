@@ -261,14 +261,14 @@ export function buildPushReminders(snapshot: AppSnapshot, now = new Date()): Pus
       const startsAt = zonedDateTimeToUtc(date, session.startsAt, TIME_ZONE);
       const dueAt = new Date(startsAt.getTime() - course.reminder.minutesBefore * 60_000);
       if (dueAt.getTime() <= now.getTime() - 10 * 60_000) continue;
-      const timing = course.reminder.minutesBefore === 0
-        ? "بدأ موعدها الآن"
-        : `تبدأ بعد ${course.reminder.minutesBefore} دقيقة`;
+      const isStartingNow = course.reminder.minutesBefore === 0;
       reminders.push({
         id: `${session.id}:${date}`,
         dueAt: dueAt.toISOString(),
-        title: `محاضرة ${course.name}`,
-        body: `${timing} · ${session.room.label}`,
+        title: isStartingNow ? "موعد محاضرتك الآن" : "محاضرتك قربت",
+        body: isStartingNow
+          ? `${course.name} تبدأ الآن · ${session.room.label}`
+          : `${course.name} تبدأ بعد ${course.reminder.minutesBefore} دقيقة · ${session.room.label}`,
         url: "/schedule"
       });
     }
