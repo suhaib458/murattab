@@ -53,7 +53,8 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const [returnToManage, setReturnToManage] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);\n  const showSplash = !splashFinished || (!data && !loadError);
+  const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
+  const showSplash = !splashFinished || (!data && !loadError);
 
   const refresh = useCallback(async () => {
     setData(await repo.snapshot());
