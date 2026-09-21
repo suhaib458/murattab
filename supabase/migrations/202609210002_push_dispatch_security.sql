@@ -13,3 +13,10 @@ create table if not exists public.push_dispatch_config (
 alter table public.push_dispatch_config enable row level security;
 revoke all on table public.push_dispatch_config from anon, authenticated;
 grant select on table public.push_dispatch_config to service_role;
+
+create policy "deny_client_push_dispatch_config"
+on public.push_dispatch_config
+for all
+to anon, authenticated
+using (false)
+with check (false);
