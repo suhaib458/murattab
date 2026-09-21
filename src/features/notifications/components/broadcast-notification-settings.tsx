@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   getPushAdminStatus,
   sendBroadcastPushNotification
@@ -124,7 +124,7 @@ export function BroadcastNotificationSettings({
             </select>
           </label>
 
-          {error && <p className="notification-error" role="alert">{error}</p>}
+          {error && <p role="alert" style={{ color: "var(--destructive)", margin: 0 }}>{error}</p>}
 
           {!confirming ? (
             <button type="submit" className="button" disabled={busy}>
