@@ -13,7 +13,15 @@ export async function supabaseRest<T>(path: string, options: RequestOptions = {}
   const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const headers = new Headers(options.headers);
   headers.set("apikey", serviceRoleKey);
-  headers.set("Authorization", `Bearer ${serviceRoleKey}`);
+
+  // Modern sb_secret_* keys authenticate through the apikey header.
+  // Legacy service_role JWTs still use Authorization: Bearer.
+  if (serviceRoleKey.startsWith("sb_secret_")) {
+    headers.delete("Authorization");
+  } else {
+    headers.set("Authorization", `Bearer ${serviceRoleKey}`);
+  }
+
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
