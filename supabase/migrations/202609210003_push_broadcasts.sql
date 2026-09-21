@@ -45,18 +45,21 @@ grant select, insert, update, delete on table public.push_admin_devices to servi
 grant select, insert, update, delete on table public.push_broadcasts to service_role;
 grant select, insert, update, delete on table public.push_broadcast_deliveries to service_role;
 
+drop policy if exists "deny_client_push_admin_devices" on public.push_admin_devices;
 create policy "deny_client_push_admin_devices"
 on public.push_admin_devices
 for all to anon, authenticated
 using (false)
 with check (false);
 
+drop policy if exists "deny_client_push_broadcasts" on public.push_broadcasts;
 create policy "deny_client_push_broadcasts"
 on public.push_broadcasts
 for all to anon, authenticated
 using (false)
 with check (false);
 
+drop policy if exists "deny_client_push_broadcast_deliveries" on public.push_broadcast_deliveries;
 create policy "deny_client_push_broadcast_deliveries"
 on public.push_broadcast_deliveries
 for all to anon, authenticated
