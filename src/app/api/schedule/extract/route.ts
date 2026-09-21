@@ -121,7 +121,10 @@ export async function POST(request: Request) {
       }
     );
   } catch (error: any) {
-    console.error("Schedule extraction error:", error);
+    console.error("Schedule extraction error:", {
+      name: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : "UNKNOWN"
+    });
 
     if (error instanceof AiUsageGuardError || error?.message === "AI_USAGE_GUARD_LIMITED") {
       const retryAfterSeconds =
