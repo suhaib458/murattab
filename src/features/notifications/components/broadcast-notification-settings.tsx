@@ -24,13 +24,27 @@ export function BroadcastNotificationSettings({
 
   useEffect(() => {
     let active = true;
-    void getPushAdminStatus().then((admin) => {
-      if (active) setIsAdmin(admin);
-    }).catch(() => {
-      if (active) setIsAdmin(false);
-    });
+
+    const refreshAdminStatus = () => {
+      void getPushAdminStatus().then((admin) => {
+        if (active) setIsAdmin(admin);
+      }).catch(() => {
+        if (active) setIsAdmin(false);
+      });
+    };
+
+    refreshAdminStatus();
+
+    const handleReturn = () => {
+      if (document.visibilityState === "visible") refreshAdminStatus();
+    };
+
+    window.addEventListener("focus", refreshAdminStatus);
+    document.addEventListener("visibilitychange", handleReturn);
     return () => {
       active = false;
+      window.removeEventListener("focus", refreshAdminStatus);
+      document.removeEventListener("visibilitychange", handleReturn);
     };
   }, []);
 
