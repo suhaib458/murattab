@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPushReminders, base64UrlToUint8Array } from "@/features/notifications/push-client";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
+import { PushBroadcastRequestSchema } from "@/domain/push";
 import { hashDeviceToken, safeTokenHashMatches } from "@/server/push/supabase-rest";
 
 const termId = "22222222-2222-4222-8222-222222222222";
@@ -73,6 +74,22 @@ describe("إشعارات الجهاز", () => {
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(safeTokenHashMatches(hash, token)).toBe(true);
     expect(safeTokenHashMatches(hash, "b".repeat(43))).toBe(false);
+  });
+
+  it("يتحقق من محتوى الإشعار العام وحدوده", () => {
+    const parsed = PushBroadcastRequestSchema.parse({
+      deviceId: "44444444-4444-4444-8444-444444444444",
+      deviceToken: "a".repeat(43),
+      title: "  إشعار تجريبي  ",
+      body: "من صهيب إلى جميع الأجهزة"
+    });
+
+    expect(parsed.title).toBe("إشعار تجريبي");
+    expect(parsed.url).toBe("/");
+    expect(PushBroadcastRequestSchema.safeParse({
+      ...parsed,
+      body: "x".repeat(241)
+    }).success).toBe(false);
   });
 });
 
