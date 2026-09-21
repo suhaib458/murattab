@@ -7,6 +7,8 @@ import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { makeBackup } from "@/domain/backup";
 import { ttuConfig } from "@/config/ttu";
 import { LocalScheduleRepository } from "@/storage/local-repository";
+import { PushNotificationSettings } from "@/features/notifications/components/push-notification-settings";
+import { disablePushNotifications } from "@/features/notifications/push-client";
 
 const repo = new LocalScheduleRepository();
 
@@ -185,6 +187,8 @@ export function SettingsView({
         </div>
       </div>
 
+      <PushNotificationSettings data={data} notify={notify} />
+
       <div className="settings-group" aria-label="الجدول">
         <h3>الجدول</h3>
         <button
@@ -343,7 +347,7 @@ export function SettingsView({
           </span>
           <div className="row-body">
             <h2>الخصوصية والإصدار</h2>
-            <p>مرتب 0.1.0 · محلي بالكامل. لا تُرسل بياناتك إلى أي خادم.</p>
+            <p>مرتب 0.1.0 · يبقى ملفك وجدولك محليين. عند تفعيل إشعارات الجهاز تُرسل تفاصيل التذكيرات الضرورية فقط وبلا اسم أو رقم جامعي.</p>
           </div>
         </div>
 
@@ -419,6 +423,7 @@ export function SettingsView({
               <button
                 className="button danger"
                 onClick={async () => {
+                  await disablePushNotifications().catch(() => {});
                   await repo.clear();
                   setConfirmClear(false);
                   await refresh();
