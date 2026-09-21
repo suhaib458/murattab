@@ -8,7 +8,7 @@ const termId = "22222222-2222-4222-8222-222222222222";
 const courseId = "11111111-1111-4111-8111-111111111111";
 const sessionId = "33333333-3333-4333-8333-333333333333";
 
-function snapshot(reminderEnabled = true): AppSnapshot {
+function snapshot(reminderEnabled = true, minutesBefore = 15): AppSnapshot {
   return {
     profile: null,
     settings: {
@@ -30,7 +30,7 @@ function snapshot(reminderEnabled = true): AppSnapshot {
       id: courseId,
       termId,
       name: "هندسة البرمجيات",
-      reminder: { enabled: reminderEnabled, minutesBefore: 15 },
+      reminder: { enabled: reminderEnabled, minutesBefore },
       createdAt: "2026-09-01T00:00:00.000Z"
     }],
     sessions: [{
@@ -53,11 +53,20 @@ describe("إشعارات الجهاز", () => {
     expect(reminders[0]).toEqual({
       id: `${sessionId}:2026-10-04`,
       dueAt: "2026-10-04T05:45:00.000Z",
-      title: "محاضرة هندسة البرمجيات",
-      body: "تبدأ بعد 15 دقيقة · مجمع القاعات – قاعة 207",
+      title: "محاضرتك قربت",
+      body: "هندسة البرمجيات تبدأ بعد 15 دقيقة · مجمع القاعات – قاعة 207",
       url: "/schedule"
     });
     expect(JSON.stringify(reminders)).not.toContain("طالب");
+  });
+
+  it("يصيغ إشعار بدء المحاضرة الآن بصيغة واضحة", () => {
+    const reminders = buildPushReminders(snapshot(true, 0), new Date("2026-10-01T00:00:00.000Z"));
+
+    expect(reminders[0]).toMatchObject({
+      title: "موعد محاضرتك الآن",
+      body: "هندسة البرمجيات تبدأ الآن · مجمع القاعات – قاعة 207"
+    });
   });
 
   it("لا ينشئ تذكيرات للمواد التي أوقف المستخدم تنبيهها", () => {
