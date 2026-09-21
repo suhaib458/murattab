@@ -17,6 +17,18 @@ type DueReminder = {
   auth: string;
 };
 
+type BroadcastDelivery = {
+  broadcast_id: string;
+  device_id: string;
+  title: string;
+  body: string;
+  url: string;
+  attempt_count: number;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
+
 type DispatchConfig = { secret_hash: string };
 
 async function authorized(request: Request): Promise<boolean> {
@@ -35,6 +47,102 @@ async function authorized(request: Request): Promise<boolean> {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+async function dispatchReminders(reminders: DueReminder[]) {
+  let sent = 0;
+  let failed = 0;
+
+  for (const reminder of reminders) {
+    try {
+      await sendDevicePush(reminder, {
+        title: reminder.title,
+        body: reminder.body,
+        url: reminder.url,
+        tag: reminder.id
+      });
+      sent += 1;
+      await supabaseRest<void>(
+        `push_reminders?id=eq.${encodeURIComponent(reminder.id)}&device_id=eq.${encodeURIComponent(reminder.device_id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString(), locked_at: null }),
+          expectJson: false
+        }
+      );
+    } catch (error) {
+      failed += 1;
+      const status = pushErrorStatus(error);
+      if (status === 404 || status === 410) {
+        await supabaseRest<void>(
+          `push_devices?id=eq.${encodeURIComponent(reminder.device_id)}`,
+          { method: "DELETE", expectJson: false }
+        );
+      } else {
+        await supabaseRest<void>(
+          `push_reminders?id=eq.${encodeURIComponent(reminder.id)}&device_id=eq.${encodeURIComponent(reminder.device_id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: reminder.attempt_count >= 5 ? "failed" : "pending",
+              locked_at: null
+            }),
+            expectJson: false
+          }
+        );
+      }
+    }
+  }
+
+  return { checked: reminders.length, sent, failed };
+}
+
+async function dispatchBroadcasts(deliveries: BroadcastDelivery[]) {
+  let sent = 0;
+  let failed = 0;
+
+  for (const delivery of deliveries) {
+    try {
+      await sendDevicePush(delivery, {
+        title: delivery.title,
+        body: delivery.body,
+        url: delivery.url,
+        tag: `murattab-broadcast-${delivery.broadcast_id}`
+      });
+      sent += 1;
+      await supabaseRest<void>(
+        `push_broadcast_deliveries?broadcast_id=eq.${encodeURIComponent(delivery.broadcast_id)}&device_id=eq.${encodeURIComponent(delivery.device_id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString(), locked_at: null }),
+          expectJson: false
+        }
+      );
+    } catch (error) {
+      failed += 1;
+      const status = pushErrorStatus(error);
+      if (status === 404 || status === 410) {
+        await supabaseRest<void>(
+          `push_devices?id=eq.${encodeURIComponent(delivery.device_id)}`,
+          { method: "DELETE", expectJson: false }
+        );
+      } else {
+        await supabaseRest<void>(
+          `push_broadcast_deliveries?broadcast_id=eq.${encodeURIComponent(delivery.broadcast_id)}&device_id=eq.${encodeURIComponent(delivery.device_id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: delivery.attempt_count >= 5 ? "failed" : "pending",
+              locked_at: null
+            }),
+            expectJson: false
+          }
+        );
+      }
+    }
+  }
+
+  return { checked: deliveries.length, sent, failed };
+}
+
 export async function POST(request: Request) {
   try {
     if (!await authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,40 +151,22 @@ export async function POST(request: Request) {
       method: "POST",
       body: JSON.stringify({ p_limit: 100 })
     });
+    const broadcasts = await supabaseRest<BroadcastDelivery[]>("rpc/claim_push_broadcast_deliveries", {
+      method: "POST",
+      body: JSON.stringify({ p_limit: 100 })
+    });
 
-    let sent = 0;
-    let failed = 0;
-    for (const reminder of reminders) {
-      try {
-        await sendDevicePush(reminder, {
-          title: reminder.title,
-          body: reminder.body,
-          url: reminder.url,
-          tag: reminder.id
-        });
-        sent += 1;
-        await supabaseRest<void>(`push_reminders?id=eq.${encodeURIComponent(reminder.id)}&device_id=eq.${encodeURIComponent(reminder.device_id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString(), locked_at: null }),
-          expectJson: false
-        });
-      } catch (error) {
-        failed += 1;
-        const status = pushErrorStatus(error);
-        if (status === 404 || status === 410) {
-          await supabaseRest<void>(`push_devices?id=eq.${encodeURIComponent(reminder.device_id)}`, { method: "DELETE", expectJson: false });
-        } else {
-          const attempts = reminder.attempt_count;
-          await supabaseRest<void>(`push_reminders?id=eq.${encodeURIComponent(reminder.id)}&device_id=eq.${encodeURIComponent(reminder.device_id)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ status: attempts >= 5 ? "failed" : "pending", locked_at: null }),
-            expectJson: false
-          });
-        }
-      }
-    }
+    const reminderResult = await dispatchReminders(reminders);
+    const broadcastResult = await dispatchBroadcasts(broadcasts);
 
-    return Response.json({ ok: true, checked: reminders.length, sent, failed });
+    return Response.json({
+      ok: true,
+      checked: reminderResult.checked + broadcastResult.checked,
+      sent: reminderResult.sent + broadcastResult.sent,
+      failed: reminderResult.failed + broadcastResult.failed,
+      reminders: reminderResult,
+      broadcasts: broadcastResult
+    });
   } catch (error) {
     return jsonError(error);
   }

@@ -64,6 +64,18 @@ export async function authenticatePushDevice(deviceId: string, deviceToken: stri
   }
 }
 
+export async function authenticatePushAdmin(deviceId: string, deviceToken: string): Promise<void> {
+  await authenticatePushDevice(deviceId, deviceToken);
+  const rows = await supabaseRest<Array<{ device_id: string }>>(
+    `push_admin_devices?device_id=eq.${encodeURIComponent(deviceId)}&select=device_id&limit=1`
+  );
+  if (!rows[0]) {
+    const error = new Error("Push admin device required");
+    Object.assign(error, { status: 403, code: "push_admin_required" });
+    throw error;
+  }
+}
+
 export function requestOriginIsAllowed(request: Request): boolean {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -74,8 +86,10 @@ export function jsonError(error: unknown): Response {
     ? Number((error as { status: unknown }).status)
     : 500;
   const safeStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+  const isAdminError = typeof error === "object" && error && "code" in error
+    && (error as { code?: unknown }).code === "push_admin_required";
   const message = safeStatus === 403
-    ? "تعذّر التحقق من هذا الجهاز. أوقف الإشعارات وفعّلها من جديد."
+    ? (isAdminError ? "هذا الجهاز غير مخوّل بإرسال إشعارات عامة." : "تعذّر التحقق من هذا الجهاز. أوقف الإشعارات وفعّلها من جديد.")
     : "تعذّر إكمال طلب الإشعارات الآن. جرّب مرة أخرى بعد قليل.";
   if (safeStatus >= 500) console.error("Push API error:", error);
   return Response.json({ error: message }, { status: safeStatus });

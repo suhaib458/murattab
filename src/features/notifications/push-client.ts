@@ -8,6 +8,7 @@ const TIME_ZONE = "Asia/Amman";
 
 type DeviceCredentials = { deviceId: string; deviceToken: string };
 export type PushStatus = "loading" | "unsupported" | "disabled" | "denied" | "enabled" | "unavailable";
+export type BroadcastPushResult = { ok: true; broadcastId: string; queued: number };
 
 const jsDayToCode: Partial<Record<number, DayCode>> = {
   0: "ح",
@@ -135,6 +136,34 @@ export async function sendTestPushNotification(): Promise<void> {
   const credentials = readCredentials();
   if (!credentials) throw new Error("فعّل الإشعارات على هذا الجهاز أولًا.");
   await api("/api/push/test", { method: "POST", body: JSON.stringify(credentials) });
+}
+
+export async function getPushAdminStatus(): Promise<boolean> {
+  const credentials = readCredentials();
+  if (!credentials) return false;
+  const result = await api<{ admin: boolean }>("/api/push/admin/status", {
+    method: "POST",
+    body: JSON.stringify(credentials)
+  }).catch(() => ({ admin: false }));
+  return result.admin;
+}
+
+export async function sendBroadcastPushNotification(input: {
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<BroadcastPushResult> {
+  const credentials = readCredentials();
+  if (!credentials) throw new Error("فعّل الإشعارات على جهاز الإدارة أولًا.");
+  return api<BroadcastPushResult>("/api/push/admin/broadcast", {
+    method: "POST",
+    body: JSON.stringify({
+      ...credentials,
+      title: input.title,
+      body: input.body,
+      url: input.url ?? "/"
+    })
+  });
 }
 
 function zonedDateTimeToUtc(date: string, time: string, timeZone: string): Date {

@@ -32,5 +32,12 @@ export const PushSyncRequestSchema = DeviceCredentialsSchema.extend({
 
 export const PushDeviceRequestSchema = DeviceCredentialsSchema;
 
+export const PushBroadcastRequestSchema = DeviceCredentialsSchema.extend({
+  title: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(240),
+  url: z.string().startsWith("/").max(300).default("/")
+});
+
 export type PushReminder = z.infer<typeof PushReminderSchema>;
 export type PushSubscriptionPayload = z.infer<typeof PushSubscriptionPayloadSchema>;
+export type PushBroadcastRequest = z.infer<typeof PushBroadcastRequestSchema>;

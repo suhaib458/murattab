@@ -8,6 +8,7 @@ import { makeBackup } from "@/domain/backup";
 import { ttuConfig } from "@/config/ttu";
 import { LocalScheduleRepository } from "@/storage/local-repository";
 import { PushNotificationSettings } from "@/features/notifications/components/push-notification-settings";
+import { BroadcastNotificationSettings } from "@/features/notifications/components/broadcast-notification-settings";
 import { disablePushNotifications } from "@/features/notifications/push-client";
 
 const repo = new LocalScheduleRepository();
@@ -188,6 +189,7 @@ export function SettingsView({
       </div>
 
       <PushNotificationSettings data={data} notify={notify} />
+      <BroadcastNotificationSettings notify={notify} />
 
       <div className="settings-group" aria-label="الجدول">
         <h3>الجدول</h3>
