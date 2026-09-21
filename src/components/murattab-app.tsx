@@ -47,7 +47,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   const [data, setData] = useState<AppSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showSplash, setShowSplash] = useState(true);\n  const [splashFinished, setSplashFinished] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
   const [online, setOnline] = useState(true);
   const [modal, setModal] = useState<"course" | "restore" | "import" | "manage" | null>(null);
   const [returnToManage, setReturnToManage] = useState(false);
@@ -182,12 +182,6 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   }, []);
 
   useEffect(() => {
-    if (!splashFinished) return;
-    if (!data && !loadError) return;
-    setShowSplash(false);
-  }, [splashFinished, data, loadError]);
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (modal) setModal(null);
@@ -275,7 +269,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
     };
   }, [data, online]);
 
-  const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
+  const showSplash = !splashFinished || (!data && !loadError);\n  const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
 
   if (pathname === "/offline") {
     return <>{children}</>;
