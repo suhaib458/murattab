@@ -6,11 +6,22 @@ export interface StoredPushSubscription {
   auth: string;
 }
 
+function asHttpsSubject(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  if (raw.startsWith("https://") || raw.startsWith("http://") || raw.startsWith("mailto:")) return raw;
+  return `https://${raw}`;
+}
+
 function getVapidConfig() {
-  const subject = process.env.VAPID_SUBJECT?.trim();
+  const subject =
+    asHttpsSubject(process.env.VAPID_SUBJECT) ??
+    asHttpsSubject(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
+    asHttpsSubject(process.env.VERCEL_URL) ??
+    "https://murattab-pi.vercel.app";
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
-  if (!subject || !publicKey || !privateKey) {
+  if (!publicKey || !privateKey) {
     throw new Error("VAPID configuration is incomplete");
   }
   return { subject, publicKey, privateKey };
@@ -41,4 +52,3 @@ export function pushErrorStatus(error: unknown): number | null {
   const status = Number((error as { statusCode: unknown }).statusCode);
   return Number.isFinite(status) ? status : null;
 }
-
