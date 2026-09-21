@@ -39,6 +39,20 @@ alter table public.push_reminders enable row level security;
 revoke all on table public.push_devices from anon, authenticated;
 revoke all on table public.push_reminders from anon, authenticated;
 
+create policy "deny_client_push_devices"
+on public.push_devices
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+create policy "deny_client_push_reminders"
+on public.push_reminders
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
 create or replace function public.replace_push_reminders(p_device_id uuid, p_reminders jsonb)
 returns void
 language plpgsql
