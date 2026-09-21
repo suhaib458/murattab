@@ -4,6 +4,8 @@ import type { PushReminder, PushSubscriptionPayload } from "@/domain/push";
 
 const DEVICE_KEY = "murattab-push-device-v1";
 const SYNC_KEY = "murattab-push-sync-v1";
+const REFRESH_KEY = "murattab-push-registration-refresh-v1";
+const REGISTRATION_REFRESH_MS = 60 * 60_000;
 const TIME_ZONE = "Asia/Amman";
 
 type DeviceCredentials = { deviceId: string; deviceToken: string };
@@ -68,6 +70,31 @@ function supportsPush(): boolean {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+async function ensurePushSubscription(): Promise<PushSubscription> {
+  const config = await api<{ available: boolean; publicKey: string | null }>("/api/push/config");
+  if (!config.available || !config.publicKey) throw new Error("خدمة الإشعارات غير مجهّزة على الخادم بعد.");
+
+  const registration = await navigator.serviceWorker.register("/sw.js", {
+    scope: "/",
+    updateViaCache: "none"
+  });
+  await registration.update().catch(() => {});
+  const ready = await navigator.serviceWorker.ready;
+  const existing = await ready.pushManager.getSubscription();
+  return existing ?? ready.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: base64UrlToUint8Array(config.publicKey)
+  });
+}
+
+async function registerSubscriptionOnServer(subscription: PushSubscription): Promise<void> {
+  const credentials = getOrCreateCredentials();
+  await api("/api/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify({ ...credentials, subscription: serializeSubscription(subscription) })
+  });
+}
+
 export async function getPushStatus(): Promise<PushStatus> {
   if (!supportsPush()) return "unsupported";
   const config = await api<{ available: boolean }>("/api/push/config").catch(() => ({ available: false }));
@@ -95,22 +122,29 @@ export async function enablePushNotifications(snapshot: AppSnapshot): Promise<vo
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("لازم تسمح بالإشعارات من إعدادات المتصفح أولًا.");
 
-  const config = await api<{ available: boolean; publicKey: string | null }>("/api/push/config");
-  if (!config.available || !config.publicKey) throw new Error("خدمة الإشعارات غير مجهّزة على الخادم بعد.");
-
-  const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-  await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
-  const subscription = existing ?? await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: base64UrlToUint8Array(config.publicKey)
-  });
-  const credentials = getOrCreateCredentials();
-  await api("/api/push/subscribe", {
-    method: "POST",
-    body: JSON.stringify({ ...credentials, subscription: serializeSubscription(subscription) })
-  });
+  const subscription = await ensurePushSubscription();
+  await registerSubscriptionOnServer(subscription);
+  localStorage.setItem(REFRESH_KEY, String(Date.now()));
   await syncPushReminders(snapshot, { force: true });
+}
+
+export async function refreshPushRegistration(
+  snapshot: AppSnapshot,
+  options: { force?: boolean } = {}
+): Promise<boolean> {
+  if (!supportsPush() || Notification.permission !== "granted") return false;
+
+  const now = Date.now();
+  const lastRefresh = Number(localStorage.getItem(REFRESH_KEY) ?? "0");
+  if (!options.force && Number.isFinite(lastRefresh) && now - lastRefresh < REGISTRATION_REFRESH_MS) {
+    return false;
+  }
+
+  const subscription = await ensurePushSubscription();
+  await registerSubscriptionOnServer(subscription);
+  localStorage.setItem(REFRESH_KEY, String(now));
+  await syncPushReminders(snapshot, { force: true });
+  return true;
 }
 
 export async function disablePushNotifications(): Promise<void> {
@@ -129,6 +163,7 @@ export async function disablePushNotifications(): Promise<void> {
   await subscription?.unsubscribe();
   localStorage.removeItem(DEVICE_KEY);
   localStorage.removeItem(SYNC_KEY);
+  localStorage.removeItem(REFRESH_KEY);
   if (serverError) throw serverError;
 }
 

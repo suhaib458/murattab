@@ -1,5 +1,5 @@
-const SHELL_CACHE = "murattab-shell-v4";
-const RUNTIME_CACHE = "murattab-runtime-v4";
+const SHELL_CACHE = "murattab-shell-v5";
+const RUNTIME_CACHE = "murattab-runtime-v5";
 const PRECACHE_OFFLINE = ["/offline", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

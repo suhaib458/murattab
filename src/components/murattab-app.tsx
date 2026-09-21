@@ -29,7 +29,8 @@ import { Splash } from "@/components/shared/splash";
 import { CourseDialog } from "@/components/shared/course-dialog";
 import { RestoreDialog } from "@/components/shared/restore-dialog";
 import { MurattabProvider, type MurattabContextValue } from "@/components/murattab-context";
-import { syncPushReminders } from "@/features/notifications/push-client";
+import { refreshPushRegistration, syncPushReminders } from "@/features/notifications/push-client";
+import { FirstRunPushPrompt } from "@/features/notifications/components/first-run-push-prompt";
 
 const repo = new LocalScheduleRepository();
 
@@ -52,6 +53,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const [returnToManage, setReturnToManage] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
 
   const refresh = useCallback(async () => {
     setData(await repo.snapshot());
@@ -61,6 +63,9 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
       sessionStorage.setItem("murattab-splash", "1");
     }
     setShowSplash(false);
+  }, []);
+  const dismissFirstRunPushPrompt = useCallback(() => {
+    setShowFirstRunPushPrompt(false);
   }, []);
 
   // Auto-start the tour once per onboarding. Existing users who never set
@@ -202,12 +207,13 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   useEffect(() => {
     if (!data) return;
     if (!data.profile) return;
+    if (showFirstRunPushPrompt) return;
 
     const completed = data.settings.completedGuideVersion ?? null;
     if (data.settings.guideAutoTrigger === true && (completed == null || completed < CURRENT_GUIDE_VERSION)) {
       autoTriggerTour();
     }
-  }, [data]);
+  }, [data, showFirstRunPushPrompt]);
 
   const theme = data?.settings.theme;
 
@@ -246,9 +252,28 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   useEffect(() => {
     if (!data || !online) return;
-    void syncPushReminders(data).catch((error: unknown) => {
-      console.warn("Unable to sync push reminders:", error);
-    });
+
+    const refreshPush = async () => {
+      try {
+        const refreshed = await refreshPushRegistration(data);
+        if (!refreshed) await syncPushReminders(data);
+      } catch (error: unknown) {
+        console.warn("Unable to refresh push registration:", error);
+      }
+    };
+
+    void refreshPush();
+
+    const handleReturnToApp = () => {
+      if (document.visibilityState === "visible") void refreshPush();
+    };
+
+    document.addEventListener("visibilitychange", handleReturnToApp);
+    window.addEventListener("focus", handleReturnToApp);
+    return () => {
+      document.removeEventListener("visibilitychange", handleReturnToApp);
+      window.removeEventListener("focus", handleReturnToApp);
+    };
   }, [data, online]);
 
   const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
@@ -280,6 +305,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
       onComplete={async (profile, settings, term) => {
         await repo.bootstrap(profile, term, settings);
         await refresh();
+        setShowFirstRunPushPrompt(true);
       }}
     />
   ) : isLegacyAcademicSelection(data.profile.facultyId, data.profile.majorId) ? (
@@ -424,6 +450,14 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
             await refresh();
             setModal(null);
           }}
+          notify={setNotice}
+        />
+      )}
+
+      {showFirstRunPushPrompt && data?.profile && (
+        <FirstRunPushPrompt
+          data={data}
+          onClose={dismissFirstRunPushPrompt}
           notify={setNotice}
         />
       )}
