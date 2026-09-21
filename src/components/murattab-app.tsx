@@ -53,7 +53,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const [returnToManage, setReturnToManage] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
+  const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);\n  const showSplash = !splashFinished || (!data && !loadError);
 
   const refresh = useCallback(async () => {
     setData(await repo.snapshot());
@@ -269,7 +269,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
     };
   }, [data, online]);
 
-  const showSplash = !splashFinished || (!data && !loadError);\n  const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
+  const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
 
   if (pathname === "/offline") {
     return <>{children}</>;
