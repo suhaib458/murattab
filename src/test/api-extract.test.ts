@@ -268,7 +268,7 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
       const body = await response.json();
       expect(body.success).toBe(false);
       expect(body.error).toBe(
-        "خدمة التحليل الذكي مشغولة حاليًا بسبب ضغط مرتفع. يرجى المحاولة مرة أخرى بعد قليل."
+        "خدمة التحليل الذكي غير متاحة مؤقتًا أو مشغولة لدى مزود الخدمة. حاول مرة أخرى بعد قليل."
       );
     }
   });
