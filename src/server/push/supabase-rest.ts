@@ -1,6 +1,9 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 type RequestOptions = RequestInit & { expectJson?: boolean };
+
+const ADMIN_SESSION_COOKIE = "murattab_admin_session";
+const ADMIN_SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
 
 function requiredEnv(name: "SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY"): string {
   const value = process.env[name]?.trim();
@@ -62,6 +65,79 @@ export async function authenticatePushDevice(deviceId: string, deviceToken: stri
     Object.assign(error, { status: 403 });
     throw error;
   }
+}
+
+export async function grantPushAdminDevice(deviceId: string): Promise<void> {
+  await supabaseRest<void>("push_admin_devices", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ device_id: deviceId }),
+    expectJson: false
+  });
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const [rawName, ...rest] = part.trim().split("=");
+    if (rawName === name) {
+      const rawValue = rest.join("=");
+      try {
+        return decodeURIComponent(rawValue);
+      } catch {
+        return rawValue;
+      }
+    }
+  }
+  return null;
+}
+
+export async function hasValidPushAdminSession(request: Request): Promise<boolean> {
+  const token = readCookie(request, ADMIN_SESSION_COOKIE);
+  if (!token || token.length < 32 || token.length > 256) return false;
+
+  const tokenHash = hashDeviceToken(token);
+  const now = new Date().toISOString();
+  const rows = await supabaseRest<Array<{ token_hash: string }>>(
+    `push_admin_sessions?token_hash=eq.${tokenHash}&expires_at=gt.${encodeURIComponent(now)}&select=token_hash&limit=1`
+  );
+  if (!rows[0]) return false;
+
+  await supabaseRest<void>(
+    `push_admin_sessions?token_hash=eq.${tokenHash}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ last_used_at: now }),
+      expectJson: false
+    }
+  );
+  return true;
+}
+
+export async function issuePushAdminSession(deviceId: string): Promise<string> {
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashDeviceToken(token);
+  const expiresAt = new Date(Date.now() + ADMIN_SESSION_MAX_AGE_SECONDS * 1000).toISOString();
+
+  await supabaseRest<void>("push_admin_sessions", {
+    method: "POST",
+    body: JSON.stringify({
+      token_hash: tokenHash,
+      created_from_device_id: deviceId,
+      expires_at: expiresAt
+    }),
+    expectJson: false
+  });
+
+  return [
+    `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    `Max-Age=${ADMIN_SESSION_MAX_AGE_SECONDS}`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=Strict"
+  ].join("; ");
 }
 
 export async function authenticatePushAdmin(deviceId: string, deviceToken: string): Promise<void> {
