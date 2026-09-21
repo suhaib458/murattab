@@ -47,22 +47,20 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   const [data, setData] = useState<AppSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showSplash, setShowSplash] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
   const [online, setOnline] = useState(true);
   const [modal, setModal] = useState<"course" | "restore" | "import" | "manage" | null>(null);
   const [returnToManage, setReturnToManage] = useState(false);
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
+  const showSplash = !splashFinished || (!data && !loadError);
 
   const refresh = useCallback(async () => {
     setData(await repo.snapshot());
   }, []);
   const dismissSplash = useCallback(() => {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("murattab-splash", "1");
-    }
-    setShowSplash(false);
+    setSplashFinished(true);
   }, []);
   const dismissFirstRunPushPrompt = useCallback(() => {
     setShowFirstRunPushPrompt(false);
@@ -177,11 +175,6 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
 
-    if (!sessionStorage.getItem("murattab-splash")) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowSplash(true);
-    }
-
     return () => {
       unmountCleanup?.();
       window.removeEventListener("online", update);
@@ -207,13 +200,14 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   useEffect(() => {
     if (!data) return;
     if (!data.profile) return;
+    if (showSplash) return;
     if (showFirstRunPushPrompt) return;
 
     const completed = data.settings.completedGuideVersion ?? null;
     if (data.settings.guideAutoTrigger === true && (completed == null || completed < CURRENT_GUIDE_VERSION)) {
       autoTriggerTour();
     }
-  }, [data, showFirstRunPushPrompt]);
+  }, [data, showSplash, showFirstRunPushPrompt]);
 
   const theme = data?.settings.theme;
 
@@ -280,6 +274,10 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   if (pathname === "/offline") {
     return <>{children}</>;
+  }
+
+  if (showSplash) {
+    return <Splash onDismiss={dismissSplash} />;
   }
 
   const contextValue: MurattabContextValue | null = data
@@ -386,8 +384,6 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
           </Link>
         ))}
       </nav>
-
-      {showSplash && <Splash onDismiss={dismissSplash} />}
 
       {modal === "course" && data && (
         <CourseDialog
