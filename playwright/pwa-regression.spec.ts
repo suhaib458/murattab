@@ -26,7 +26,7 @@ const TEST_SNAPSHOT = {
     {
       id: "4649c262-4d89-4dec-ae0b-ad8f3426d0ed",
       name: "الفصل الدراسي الأول 2026/2027",
-      startsOn: "2026-10-04",
+      startsOn: "2026-10-11",
       endsOn: "2027-01-07",
       isCurrent: true,
     },

@@ -16,23 +16,21 @@ export const PRODUCTION_TERM_ID = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
 export const PRODUCTION_TERM: AcademicTerm = AcademicTermSchema.parse({
   id: PRODUCTION_TERM_ID,
   name: "الفصل الدراسي الأول 2026/2027",
-  startsOn: "2026-10-04",
+  startsOn: "2026-10-11",
   endsOn: "2027-01-07",
   isCurrent: true
 });
 
 /**
- * Detect and rewrite a legacy V0 placeholder term created during Foundation.
- * Returns the migrated term list (and a possibly-updated activeTermId) and a
- * `migrated` flag indicating whether any rewrite occurred.
+ * Detect and rewrite stale academic-term records.
  *
- * Conditions for migration (ALL must hold for a term to be rewritten):
- *   1. name == "الفصل الحالي"
- *   2. startsOn == "2026-09-01"
- *   3. endsOn   == "2026-12-31"
- *   4. isCurrent == true
+ * Two exact signatures are eligible:
+ *   1. The Foundation V0 placeholder term.
+ *   2. The previously-published TTU production term whose teaching start was
+ *      2026-10-04 before the official delay to 2026-10-11.
  *
- * We do NOT modify any other term the user may have created manually.
+ * User-created terms are never rewritten unless they exactly match one of
+ * those known stale signatures.
  */
 export function migrateLegacyTerms(
   terms: AcademicTerm[],
@@ -40,12 +38,20 @@ export function migrateLegacyTerms(
 ): { terms: AcademicTerm[]; activeTermId: string | null; migrated: boolean } {
   let migrated = false;
   const next = terms.map((t) => {
-    if (
+    const isFoundationPlaceholder =
       t.name === "الفصل الحالي" &&
       t.startsOn === "2026-09-01" &&
       t.endsOn === "2026-12-31" &&
-      t.isCurrent
-    ) {
+      t.isCurrent;
+
+    const isSupersededProductionTerm =
+      t.id === PRODUCTION_TERM_ID &&
+      t.name === "الفصل الدراسي الأول 2026/2027" &&
+      t.startsOn === "2026-10-04" &&
+      t.endsOn === "2027-01-07" &&
+      t.isCurrent;
+
+    if (isFoundationPlaceholder || isSupersededProductionTerm) {
       migrated = true;
       return PRODUCTION_TERM;
     }

@@ -224,24 +224,24 @@ describe("الجدول ومنطق المجال في مرتب", () => {
 
   describe("توليد ملفات التقويم (ICS) وفق RFC 5545", () => {
     // Phase 3C: production first-semester 2026/2027 dates (teaching start).
-    const term = { id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true };
+    const term = { id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true };
     const course = {
       id: courseId,
       termId,
       name: "برمجة الويب",
       reminder: { enabled: true, minutesBefore: 15 },
-      createdAt: "2026-10-04T00:00:00.000Z"
+      createdAt: "2026-10-11T00:00:00.000Z"
     };
 
     it("يحسب تاريخ أول تكرار (DTSTART) يطابق يوم المحاضرة الفعلي", () => {
-      // 2026-10-04 هو يوم أحد (ح)
-      // لجلسة الأحد (ح) عند term.startsOn = 2026-10-04، يجب أن يكون أول تاريخ 2026-10-04
+      // 2026-10-11 هو يوم أحد (ح)
+      // لجلسة الأحد (ح) عند term.startsOn = 2026-10-11، يجب أن يكون أول تاريخ 2026-10-11
       const sundayFirstDate = getFirstOccurrenceDate(term.startsOn, "ح");
-      expect(sundayFirstDate).toBe("20261004");
+      expect(sundayFirstDate).toBe("20261011");
 
-      // لجلسة الثلاثاء (ث)، أول تاريخ بعد 2026-10-04 هو 2026-10-06
+      // لجلسة الثلاثاء (ث)، أول تاريخ بعد 2026-10-11 هو 2026-10-13
       const tuesdayFirstDate = getFirstOccurrenceDate(term.startsOn, "ث");
-      expect(tuesdayFirstDate).toBe("20261006");
+      expect(tuesdayFirstDate).toBe("20261013");
     });
   });
 
@@ -425,7 +425,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
     const boundedTerm = {
       id: termId,
       name: "الفصل الدراسي الأول 2026/2027",
-      startsOn: "2026-10-04",
+      startsOn: "2026-10-11",
       endsOn: "2027-01-07",
       isCurrent: true
     };
@@ -461,7 +461,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         [sunday, thursday],
         [boundedCourse],
         [boundedTerm],
-        "2026-10-04"
+        "2026-10-11"
       );
       expect(result.map((session) => session.day)).toEqual(["ح"]);
     });
@@ -516,7 +516,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         "08:00"
       );
       expect(next).not.toBeNull();
-      expect(next?.date).toBe("2026-10-04");
+      expect(next?.date).toBe("2026-10-11");
       expect(next?.session.day).toBe("ح");
     });
   });

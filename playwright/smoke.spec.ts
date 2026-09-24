@@ -165,7 +165,7 @@ test("تدفق التحديث غير المدمر: ملف شخصي قديم يح
         {
           id: "4649c262-4d89-4dec-ae0b-ad8f3426d0ed",
           name: "الفصل الدراسي الأول 2026/2027",
-          startsOn: "2026-10-04",
+          startsOn: "2026-10-11",
           endsOn: "2027-01-07",
           isCurrent: true
         }
@@ -246,7 +246,7 @@ test("Home لا يحوي بطاقة مقدمة أو نص «متصل» أو زر 
         createdAt: new Date().toISOString()
       },
       settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [],
       sessions: []
     };
@@ -292,7 +292,7 @@ test("الإعدادات تعرض بطاقة الطالب ومتغيرات ال�
         createdAt: new Date().toISOString()
       },
       settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [],
       sessions: []
     };
@@ -332,7 +332,7 @@ test("الإعدادات تعرض بطاقة الطالب ومتغيرات ال�
 });
 
 test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحالية، الملخص، والفراغ)", async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-10-04T09:30:00")); // 2026-10-04 is Sunday (ح)
+  await page.clock.setFixedTime(new Date("2026-10-11T09:30:00")); // 2026-10-11 is Sunday (ح)
   await page.addInitScript(() => {
     const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
     const courseId1 = "11111111-1111-4111-8111-111111111111";
@@ -347,10 +347,10 @@ test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحال�
         createdAt: new Date().toISOString()
       },
       settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [
-        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-04T00:00:00.000Z" },
-        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-04T00:00:00.000Z" }
+        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-11T00:00:00.000Z" },
+        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-11T00:00:00.000Z" }
       ],
       sessions: [
         { id: "s1", courseId: courseId1, day: "ح", startsAt: "09:00", endsAt: "10:00", room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false }, kind: "lecture" },
@@ -383,7 +383,7 @@ test("Phase 4.1: Home تعرض ذكاء اليوم (المحاضرة الحال�
 });
 
 test("Phase 4.2: Schedule يعرض ذكاء اليوم (المحاضرة الحالية، الملخص، الفراغ، والتعارض)", async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-10-04T09:30:00")); // 2026-10-04 is Sunday (ح)
+  await page.clock.setFixedTime(new Date("2026-10-11T09:30:00")); // 2026-10-11 is Sunday (ح)
   await page.addInitScript(() => {
     const termId = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
     const courseId1 = "11111111-1111-4111-8111-111111111111";
@@ -399,11 +399,11 @@ test("Phase 4.2: Schedule يعرض ذكاء اليوم (المحاضرة الح�
         createdAt: new Date().toISOString()
       },
       settings: { id: "settings", theme: "light", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [
-        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
-        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
-        { id: courseId3, termId, name: "قواعد البيانات", createdAt: "2026-10-04T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } }
+        { id: courseId1, termId, name: "برمجة الويب", createdAt: "2026-10-11T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
+        { id: courseId2, termId, name: "هياكل البيانات", createdAt: "2026-10-11T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } },
+        { id: courseId3, termId, name: "قواعد البيانات", createdAt: "2026-10-11T00:00:00.000Z", reminder: { enabled: false, minutesBefore: 15 } }
       ],
       sessions: [
         { id: "s1", courseId: courseId1, day: "ح", startsAt: "09:00", endsAt: "10:00", room: { raw: "207 م", label: "مجمع القاعات – قاعة 207", isOnline: false }, kind: "lecture" },
@@ -477,7 +477,7 @@ test("Phase 4.2.1: Bottom navigation مستقر تمامًا والمظهر يع
         createdAt: new Date().toISOString()
       },
       settings: { id: "settings", theme: "light", onboardingComplete: true, splashShown: true, activeTermId: termId, guideSeen: true, completedGuideVersion: 1, schemaVersion: 1 },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [],
       sessions: []
     };
@@ -561,7 +561,7 @@ test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
         completedGuideVersion: 1,
         schemaVersion: 1
       },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [],
       sessions: []
     };
@@ -744,7 +744,7 @@ test.describe("Phase 4.2.2: Hard-Reload Existing User Theme Fallback (without mu
         completedGuideVersion: 1,
         schemaVersion: 1
       },
-      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+      terms: [{ id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true }],
       courses: [],
       sessions: []
     };
