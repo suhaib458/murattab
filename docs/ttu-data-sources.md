@@ -91,9 +91,10 @@ Primary source: https://www.ttu.edu.jo/e-calendar/ (Product Owner manually verif
 |---|---|---|
 | Academic year | 2026/2027 | VERIFIED_OFFICIAL |
 | Term | First (الفصل الدراسي الأول) | VERIFIED_OFFICIAL |
-| Academic year start / add-drop | 2026-09-27 | VERIFIED_OFFICIAL |
-| Makeup / incomplete exams | 2026-09-27 → 2026-10-10 | VERIFIED_OFFICIAL |
-| Teaching start | 2026-10-04 | VERIFIED_OFFICIAL |
+| Academic year start / faculty work start | 2026-10-04 | VERIFIED_OFFICIAL |
+| Add/drop period | 2026-10-04 → 2026-10-08 | VERIFIED_OFFICIAL |
+| Makeup / incomplete exams | 2026-10-04 → 2026-10-08 | VERIFIED_OFFICIAL |
+| Teaching start | 2026-10-11 | VERIFIED_OFFICIAL |
 | Last day to equate courses | 2026-10-29 | VERIFIED_OFFICIAL |
 | Midterm exam window | 2026-11-22 → 2026-12-03 | VERIFIED_OFFICIAL |
 | Last teaching day | 2027-01-07 | VERIFIED_OFFICIAL |
@@ -101,7 +102,19 @@ Primary source: https://www.ttu.edu.jo/e-calendar/ (Product Owner manually verif
 | Final theoretical exams | 2027-01-17 → 2027-01-26 | VERIFIED_OFFICIAL |
 | Last day to drop a course | 2027-01-07 | VERIFIED_OFFICIAL |
 
-The V1 student-facing calendar shows the 16 student-relevant events listed in
+Revision note (2026-09-24): an official TTU Admission & Registration notice
+postponed the academic-year / faculty-work start to 2026-10-04 and the first
+teaching day to 2026-10-11. It also set both the add/drop period and the
+makeup/incomplete exam window to 2026-10-04 → 2026-10-08. These revised dates
+supersede the older e-calendar values above for the affected milestones.
+
+A separate College of Information Technology and Communications notice schedules
+specific accepted-excuse summer 2025/2026 exams on 2026-09-29 and incomplete
+graduation-project discussions on 2026-09-30. Those are faculty- and
+student-specific operational notices, so they are documented but are not
+surfaced as university-wide calendar events.
+
+The V1 student-facing calendar shows the 17 student-relevant events listed in
 `data/academic-calendars/ttu/2026-2027/first/calendar.json` (registration, exams,
 holidays, teaching milestones). Administrative events (e.g. grade-submission
 deadlines, faculty senate meetings, faculty sabbaticals) are present in the
@@ -112,7 +125,7 @@ official table but are intentionally NOT surfaced in the student UI.
 | Field | Value |
 |---|---|
 | `name` | الفصل الدراسي الأول 2026/2027 |
-| `startsOn` | 2026-10-04 (teaching start, used for ICS first-occurrence math) |
+| `startsOn` | 2026-10-11 (revised teaching start, used for ICS first-occurrence math) |
 | `endsOn` | 2027-01-07 (last teaching day) |
 | `isCurrent` | true |
 
