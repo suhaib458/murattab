@@ -190,11 +190,14 @@ export function PushNotificationSettings({
     } catch (cause) {
       // Keep the user's local choice instead of rolling the whole preference
       // object back and accidentally undoing newer taps on other switches.
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "تم حفظ اختيارك على الجهاز، لكن تعذّرت مزامنته مع خدمة الإشعارات الآن."
-      );
+      // Ignore an older failed request if the user already made a newer choice.
+      if (preferencesRef.current === next) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "تم حفظ اختيارك على الجهاز، لكن تعذّرت مزامنته مع خدمة الإشعارات الآن."
+        );
+      }
     } finally {
       setSavingKeys((keys) => {
         const updated = new Set(keys);
