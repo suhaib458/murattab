@@ -113,6 +113,7 @@ describe("TTU API foundation", () => {
 
   it("reads TTU integration settings without enabling the API by default", () => {
     const config = readTtuApiConfig({
+      NODE_ENV: "test",
       TTU_API_BASE_URL: "https://api.ttu.example/",
       TTU_API_CALENDAR_PATH: "/calendar"
     } as NodeJS.ProcessEnv);
