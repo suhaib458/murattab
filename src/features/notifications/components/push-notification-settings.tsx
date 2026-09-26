@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -81,8 +81,9 @@ export function PushNotificationSettings({
 }) {
   const [status, setStatus] = useState<PushStatus>("loading");
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const preferencesRef = useRef<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
   const [busy, setBusy] = useState(false);
-  const [savingKey, setSavingKey] = useState<PreferenceKey | null>(null);
+  const [savingKeys, setSavingKeys] = useState<Set<PreferenceKey>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [needsIosInstall, setNeedsIosInstall] = useState(false);
 
@@ -96,7 +97,9 @@ export function PushNotificationSettings({
 
     const refreshDeviceStatus = () => {
       if (!active) return;
-      setPreferences(getNotificationPreferences());
+      const storedPreferences = getNotificationPreferences();
+      preferencesRef.current = storedPreferences;
+      setPreferences(storedPreferences);
       setNeedsIosInstall(isIosDevice() && !isStandaloneApp());
       void getPushStatus()
         .then((next) => {
@@ -127,7 +130,9 @@ export function PushNotificationSettings({
     setError(null);
     try {
       await enablePushNotifications(data);
-      setPreferences(getNotificationPreferences());
+      const storedPreferences = getNotificationPreferences();
+      preferencesRef.current = storedPreferences;
+      setPreferences(storedPreferences);
       setStatus("enabled");
       await sendTestPushNotification();
       notify("تم تفعيل إشعارات مرتب وإرسال إشعار تجريبي لهذا الجهاز.");
@@ -169,20 +174,33 @@ export function PushNotificationSettings({
   };
 
   const togglePreference = async (key: PreferenceKey) => {
-    if (status !== "enabled" || savingKey) return;
-    const previous = preferences;
-    const next = { ...preferences, [key]: !preferences[key] };
+    if (status !== "enabled") return;
+
+    // Use a ref as the source of truth so several switches can be tapped back
+    // to back before React finishes the next render.
+    const current = preferencesRef.current;
+    const next = { ...current, [key]: !current[key] };
+    preferencesRef.current = next;
     setPreferences(next);
-    setSavingKey(key);
+    setSavingKeys((keys) => new Set(keys).add(key));
     setError(null);
 
     try {
       await updateNotificationPreferences(data, next);
     } catch (cause) {
-      setPreferences(previous);
-      setError(cause instanceof Error ? cause.message : "تعذّر حفظ تفضيلات الإشعارات.");
+      // Keep the user's local choice instead of rolling the whole preference
+      // object back and accidentally undoing newer taps on other switches.
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "تم حفظ اختيارك على الجهاز، لكن تعذّرت مزامنته مع خدمة الإشعارات الآن."
+      );
     } finally {
-      setSavingKey(null);
+      setSavingKeys((keys) => {
+        const updated = new Set(keys);
+        updated.delete(key);
+        return updated;
+      });
     }
   };
 
@@ -220,10 +238,10 @@ export function PushNotificationSettings({
         <div className="notification-actions">
           {status === "enabled" ? (
             <>
-              <button type="button" className="button secondary" onClick={() => void sendTest()} disabled={busy || Boolean(savingKey)}>
+              <button type="button" className="button secondary" onClick={() => void sendTest()} disabled={busy || savingKeys.size > 0}>
                 تجربة
               </button>
-              <button type="button" className="button ghost" onClick={() => void disable()} disabled={busy || Boolean(savingKey)}>
+              <button type="button" className="button ghost" onClick={() => void disable()} disabled={busy || savingKeys.size > 0}>
                 إيقاف
               </button>
             </>
@@ -259,7 +277,7 @@ export function PushNotificationSettings({
 
           {preferenceRows.map((item) => {
             const enabled = preferences[item.key];
-            const saving = savingKey === item.key;
+            const saving = savingKeys.has(item.key);
             return (
               <div className="notification-preference-row" key={item.key}>
                 <div className="notification-preference-copy">
@@ -281,7 +299,6 @@ export function PushNotificationSettings({
                   role="switch"
                   aria-checked={enabled}
                   aria-label={(enabled ? "إيقاف " : "تفعيل ") + item.title}
-                  disabled={Boolean(savingKey)}
                   data-checked={enabled ? "true" : "false"}
                   onClick={() => void togglePreference(item.key)}
                 >
