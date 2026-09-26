@@ -17,7 +17,8 @@ function resolveApiUrl(config: TtuApiConfig, path: string): URL {
   let base: URL;
   let resolved: URL;
   try {
-    base = new URL(config.baseUrl);
+    const normalizedBase = config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`;
+    base = new URL(normalizedBase);
     resolved = new URL(path, base);
   } catch {
     throw new TtuApiError("TTU API URL configuration is invalid", "INVALID_URL");
