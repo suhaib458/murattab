@@ -486,6 +486,11 @@ function buildTomorrowSummaries(
 
     const day = sessionsForDate(targetDate, snapshot, courses);
     if (day.length === 0) {
+      // Avoid a daily stream of "no classes tomorrow" messages. We only send
+      // this reassurance after a day that actually had classes.
+      const previousDay = sessionsForDate(previousDate, snapshot, courses);
+      if (previousDay.length === 0) continue;
+
       reminders.push({
         id: `smart:tomorrow:${targetDate}`,
         dueAt: dueAt.toISOString(),
@@ -517,19 +522,38 @@ function calendarReminderTitle(kind: (typeof ttuAcademicCalendar.events)[number]
 }
 
 function buildAcademicCalendarReminders(start: string, end: string, now: Date): PushReminder[] {
-  return ttuAcademicCalendar.events
-    .filter((event) => event.startsOn >= start && event.startsOn <= end)
-    .map((event) => {
-      const dueAt = zonedDateTimeToUtc(addDays(event.startsOn, -1), "18:00", TIME_ZONE);
-      return {
-        id: `smart:calendar:${event.id}`,
-        dueAt: dueAt.toISOString(),
-        title: calendarReminderTitle(event.kind),
-        body: `غدًا: ${event.title}`,
-        url: "/calendar"
-      } satisfies PushReminder;
-    })
-    .filter((reminder) => shouldKeepReminder(new Date(reminder.dueAt), now));
+  const grouped = new Map<string, typeof ttuAcademicCalendar.events>();
+  for (const event of ttuAcademicCalendar.events) {
+    if (event.startsOn < start || event.startsOn > end) continue;
+    grouped.set(event.startsOn, [...(grouped.get(event.startsOn) ?? []), event]);
+  }
+
+  const reminders: PushReminder[] = [];
+  for (const [date, events] of grouped) {
+    const dueAt = zonedDateTimeToUtc(addDays(date, -1), "18:00", TIME_ZONE);
+    if (!shouldKeepReminder(dueAt, now)) continue;
+
+    const title = events.length === 1
+      ? calendarReminderTitle(events[0].kind)
+      : "مواعيد جامعية مهمة غدًا";
+
+    const joinedTitles = events.map((event) => event.title).join(" • ");
+    const body = events.length === 1
+      ? `غدًا: ${events[0].title}`
+      : joinedTitles.length <= 230
+        ? joinedTitles
+        : `${joinedTitles.slice(0, 227)}…`;
+
+    reminders.push({
+      id: `smart:calendar:${date}`,
+      dueAt: dueAt.toISOString(),
+      title,
+      body,
+      url: "/calendar"
+    });
+  }
+
+  return reminders;
 }
 
 function buildDayCompleteReminders(
