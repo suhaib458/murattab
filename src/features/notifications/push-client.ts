@@ -129,13 +129,70 @@ export function saveNotificationPreferences(preferences: NotificationPreferences
   }
 }
 
-export async function updateNotificationPreferences(
+type PreferenceSyncWaiter = {
+  resolve: () => void;
+  reject: (reason: unknown) => void;
+};
+
+type PendingPreferenceSync = {
+  snapshot: AppSnapshot;
+  preferences: NotificationPreferences;
+  waiters: PreferenceSyncWaiter[];
+};
+
+let preferenceSyncRunning = false;
+let pendingPreferenceSync: PendingPreferenceSync | null = null;
+
+async function flushNotificationPreferenceSync(): Promise<void> {
+  if (preferenceSyncRunning) return;
+  preferenceSyncRunning = true;
+
+  try {
+    while (pendingPreferenceSync) {
+      const current = pendingPreferenceSync;
+      pendingPreferenceSync = null;
+
+      try {
+        await syncPushReminders(current.snapshot, {
+          force: true,
+          preferences: current.preferences
+        });
+        current.waiters.forEach((waiter) => waiter.resolve());
+      } catch (error) {
+        current.waiters.forEach((waiter) => waiter.reject(error));
+      }
+    }
+  } finally {
+    preferenceSyncRunning = false;
+  }
+}
+
+export function updateNotificationPreferences(
   snapshot: AppSnapshot,
   preferences: NotificationPreferences
 ): Promise<void> {
+  // Save the user's choice immediately so rapid taps feel instant and survive
+  // navigation/reloads even while the server reminder list is still syncing.
   saveNotificationPreferences(preferences);
   if (typeof localStorage !== "undefined") localStorage.removeItem(SYNC_KEY);
-  await syncPushReminders(snapshot, { force: true, preferences });
+
+  return new Promise<void>((resolve, reject) => {
+    if (pendingPreferenceSync) {
+      // Collapse rapid changes that happen while one sync is in flight. The
+      // newest complete preference snapshot is what should reach the server.
+      pendingPreferenceSync.snapshot = snapshot;
+      pendingPreferenceSync.preferences = preferences;
+      pendingPreferenceSync.waiters.push({ resolve, reject });
+    } else {
+      pendingPreferenceSync = {
+        snapshot,
+        preferences,
+        waiters: [{ resolve, reject }]
+      };
+    }
+
+    void flushNotificationPreferenceSync();
+  });
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
