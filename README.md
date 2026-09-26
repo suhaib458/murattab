@@ -159,6 +159,8 @@ flowchart TD
     API[/api/schedule/extract]
     GUARD[AI usage guard]
     GEMINI[Gemini API]
+    TTUAPI[Optional authorized TTU API]
+    TTUFALLBACK[Bundled verified TTU calendar]
     PWA[Service Worker / Manifest]
 
     UI --> REPO
@@ -167,6 +169,8 @@ flowchart TD
     UI --> API
     API --> GUARD
     GUARD --> GEMINI
+    UI --> TTUAPI
+    TTUAPI --> TTUFALLBACK
     DOMAIN --> REPO
     PWA --> UI
 ```
@@ -282,6 +286,16 @@ http://localhost:3000
 | `AI_RESULT_CACHE_MAX_ENTRIES` | Maximum warm-memory cached results |
 | `NEXT_PUBLIC_POSTHOG_KEY` | Optional publishable PostHog project token for anonymous product events |
 | `NEXT_PUBLIC_POSTHOG_HOST` | PostHog ingestion host; defaults to `https://us.i.posthog.com` |
+| `TTU_API_ENABLED` | Enables the optional authorized TTU integration; defaults to false |
+| `TTU_API_BASE_URL` | Server-only official TTU API base URL |
+| `TTU_API_TOKEN` | Optional server-only TTU API credential |
+| `TTU_API_AUTH_HEADER` | Configurable authentication header |
+| `TTU_API_AUTH_PREFIX` | Optional authentication prefix such as Bearer |
+| `TTU_API_CALENDAR_PATH` | Official academic-calendar resource path |
+| `TTU_API_COURSE_CATALOG_PATH` | Reserved course-catalog resource path |
+| `TTU_API_STUDENT_SCHEDULE_PATH` | Reserved student-schedule resource path |
+| `TTU_API_TIMEOUT_MS` | TTU upstream request timeout |
+| `TTU_API_CACHE_TTL_MS` | Short server-side cache duration for official TTU data |
 
 **Never commit real API keys or `.env` files.**
 
@@ -371,6 +385,7 @@ Possible future expansion, after validating the TTU version:
 - Native mobile packaging if product needs justify it
 - More resilient distributed AI quota management
 - Official university/API integrations when available and authorized
+- TTU API foundation is already prepared behind a disabled-by-default server adapter with the current verified calendar kept as fallback
 
 ---
 
@@ -379,6 +394,8 @@ Possible future expansion, after validating the TTU version:
 **Murattab is an independent student-built project. It is not an official Tafila Technical University application and is not currently connected to the university's student information systems.**
 
 Any future official integration should use authorized university APIs or approved data-access mechanisms only.
+
+Technical integration notes: [docs/ttu-api-integration.md](./docs/ttu-api-integration.md)
 
 ---
 

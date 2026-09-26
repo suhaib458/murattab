@@ -1,8 +1,9 @@
 import type { AppSnapshot } from "@/repositories/schedule-repository";
-import type { ClassSession, Course, DayCode } from "@/domain/models";
+import type { AcademicCalendar, ClassSession, Course, DayCode } from "@/domain/models";
 import type { PushReminder, PushSubscriptionPayload } from "@/domain/push";
 import { ttuAcademicCalendar } from "@/domain/calendar";
 import { formatArabicDuration, formatArabicTime } from "@/domain/schedule";
+import { getPreferredAcademicCalendar } from "@/features/calendar/academic-calendar-source";
 
 const DEVICE_KEY = "murattab-push-device-v1";
 const SYNC_KEY = "murattab-push-sync-v1";
@@ -514,16 +515,21 @@ function buildTomorrowSummaries(
   return reminders;
 }
 
-function calendarReminderTitle(kind: (typeof ttuAcademicCalendar.events)[number]["kind"]): string {
+function calendarReminderTitle(kind: AcademicCalendar["events"][number]["kind"]): string {
   if (kind === "exam") return "تنبيه امتحانات الجامعة";
   if (kind === "registration") return "موعد أكاديمي مهم";
   if (kind === "holiday") return "تذكير بالعطلة";
   return "تحديث من التقويم الجامعي";
 }
 
-function buildAcademicCalendarReminders(start: string, end: string, now: Date): PushReminder[] {
-  const grouped = new Map<string, typeof ttuAcademicCalendar.events>();
-  for (const event of ttuAcademicCalendar.events) {
+function buildAcademicCalendarReminders(
+  start: string,
+  end: string,
+  now: Date,
+  calendar: AcademicCalendar
+): PushReminder[] {
+  const grouped = new Map<string, AcademicCalendar["events"]>();
+  for (const event of calendar.events) {
     if (event.startsOn < start || event.startsOn > end) continue;
     grouped.set(event.startsOn, [...(grouped.get(event.startsOn) ?? []), event]);
   }
@@ -594,7 +600,8 @@ function buildDayCompleteReminders(
 export function buildPushReminders(
   snapshot: AppSnapshot,
   now = new Date(),
-  preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES
+  preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES,
+  academicCalendar: AcademicCalendar = ttuAcademicCalendar
 ): PushReminder[] {
   const activeTerm = snapshot.terms.find((term) => term.id === snapshot.settings.activeTermId) ?? snapshot.terms[0];
   if (!activeTerm) return [];
@@ -644,7 +651,7 @@ export function buildPushReminders(
   if (preferences.academicCalendar) {
     const calendarStart = today;
     const calendarEnd = addDays(today, SMART_REMINDER_HORIZON_DAYS);
-    reminders.push(...buildAcademicCalendarReminders(calendarStart, calendarEnd, now));
+    reminders.push(...buildAcademicCalendarReminders(calendarStart, calendarEnd, now, academicCalendar));
   }
 
   const unique = new Map<string, PushReminder>();
@@ -678,7 +685,10 @@ export async function syncPushReminders(
   if (!await registration?.pushManager.getSubscription()) return false;
 
   const preferences = options.preferences ?? getNotificationPreferences();
-  const reminders = buildPushReminders(snapshot, new Date(), preferences);
+  const academicCalendar = preferences.academicCalendar
+    ? await getPreferredAcademicCalendar()
+    : ttuAcademicCalendar;
+  const reminders = buildPushReminders(snapshot, new Date(), preferences, academicCalendar);
   const signature = reminderSignature(reminders);
   if (!options.force && localStorage.getItem(SYNC_KEY) === signature) return false;
   await api("/api/push/reminders", {
