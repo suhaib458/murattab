@@ -1271,6 +1271,131 @@ p { line-height: 1.65; }
   .notification-actions .button { flex: 1; }
 }
 
+
+.notification-preferences {
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 42%, transparent);
+}
+.notification-preferences-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px 12px;
+}
+.notification-preferences-header h2 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+.notification-preferences-header p {
+  margin: 3px 0 0;
+  color: var(--foreground-muted);
+  font-size: 0.82rem;
+}
+.notification-private-badge {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  color: var(--success);
+  border-radius: var(--radius-pill);
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.notification-preference-row {
+  min-height: 68px;
+  padding: 12px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.notification-preference-copy {
+  flex: 1;
+  min-width: 0;
+}
+.notification-preference-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.notification-preference-title strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.notification-preference-title > span {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: var(--primary);
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.notification-preference-copy p,
+.notification-preference-copy small {
+  display: block;
+  margin: 3px 0 0;
+  color: var(--foreground-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.notification-preference-copy small {
+  color: color-mix(in srgb, var(--primary) 85%, var(--foreground));
+}
+.notification-switch {
+  width: 48px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  direction: ltr;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--foreground-muted) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--foreground-muted) 25%, var(--border));
+  transition: background-color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.notification-switch > span:first-child {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.notification-switch[data-checked="true"] {
+  justify-content: flex-end;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.notification-switch:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.notification-preferences-footnote {
+  margin: 0;
+  padding: 12px 18px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  color: var(--foreground-muted);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 560px) {
+  .notification-preferences-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .notification-private-badge {
+    align-self: flex-start;
+  }
+  .notification-preference-row {
+    padding-inline: 14px;
+  }
+}
+
 /* About card: social-follow section */
 .about-social-section {
   border-top: 1px solid var(--border);

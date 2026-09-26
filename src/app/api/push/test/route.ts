@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     try {
       await sendDevicePush(device, {
         title: "إشعارات مرتب جاهزة",
-        body: "تمام! رح توصلك تذكيرات المحاضرات على هذا الجهاز.",
+        body: "تمام! إشعارات مرتب شغّالة على هذا الجهاز وتقدر تخصّصها من الإعدادات.",
         url: "/schedule",
         tag: "murattab-push-test"
       });

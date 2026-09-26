@@ -47,7 +47,7 @@ export function FirstRunPushPrompt({
     setError(null);
     try {
       await enablePushNotifications(data);
-      notify("تم تفعيل إشعارات المحاضرات على هذا الجهاز.");
+      notify("تم تفعيل إشعارات مرتب على هذا الجهاز.");
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذّر تفعيل الإشعارات.");
@@ -82,7 +82,7 @@ export function FirstRunPushPrompt({
         <div className="actions">
           {!needsIosInstall && status !== "unsupported" && status !== "unavailable" && status !== "denied" && (
             <button type="button" className="button" onClick={() => void enable()} disabled={busy || status === "loading"}>
-              {busy ? "جارٍ التفعيل…" : "تفعيل إشعارات المحاضرات"}
+              {busy ? "جارٍ التفعيل…" : "تفعيل الإشعارات"}
             </button>
           )}
           <button type="button" className="button ghost" onClick={onClose} disabled={busy}>

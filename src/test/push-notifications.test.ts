@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPushReminders, base64UrlToUint8Array } from "@/features/notifications/push-client";
+import { DEFAULT_NOTIFICATION_PREFERENCES, buildPushReminders, base64UrlToUint8Array } from "@/features/notifications/push-client";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { PushBroadcastRequestSchema } from "@/domain/push";
 import { hashDeviceToken, safeTokenHashMatches } from "@/server/push/supabase-rest";
@@ -60,6 +60,11 @@ describe("إشعارات الجهاز", () => {
     expect(JSON.stringify(reminders)).not.toContain("طالب");
   });
 
+  it("يصيغ مدة التذكير الطويلة بالعربية بدل عرض عدد دقائق كبير", () => {
+    const reminders = buildPushReminders(snapshot(true, 60), new Date("2026-10-01T00:00:00.000Z"));
+    expect(reminders[0].body).toContain("تبدأ بعد ساعة");
+  });
+
   it("يصيغ إشعار بدء المحاضرة الآن بصيغة واضحة", () => {
     const reminders = buildPushReminders(snapshot(true, 0), new Date("2026-10-01T00:00:00.000Z"));
 
@@ -71,6 +76,82 @@ describe("إشعارات الجهاز", () => {
 
   it("لا ينشئ تذكيرات للمواد التي أوقف المستخدم تنبيهها", () => {
     expect(buildPushReminders(snapshot(false), new Date("2026-10-01T00:00:00.000Z"))).toEqual([]);
+  });
+
+  it("يبني ملخص دوام بكرا الساعة 7 مساءً بدون بيانات شخصية", () => {
+    const reminders = buildPushReminders(
+      snapshot(),
+      new Date("2026-10-03T12:00:00.000Z"),
+      {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        classReminders: false,
+        tomorrowSummary: true
+      }
+    );
+
+    const reminder = reminders.find((item) => item.id === "smart:tomorrow:2026-10-04");
+    expect(reminder).toEqual({
+      id: "smart:tomorrow:2026-10-04",
+      dueAt: "2026-10-03T16:00:00.000Z",
+      title: "ملخص دوام بكرا",
+      body: "محاضرة واحدة · أولها هندسة البرمجيات الساعة 9:00 ص · مجمع القاعات – قاعة 207",
+      url: "/schedule"
+    });
+  });
+
+  it("يبني ملخصًا صباحيًا ذكيًا قبل أول محاضرة", () => {
+    const reminders = buildPushReminders(
+      snapshot(),
+      new Date("2026-10-03T12:00:00.000Z"),
+      {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        classReminders: false,
+        morningBriefing: true
+      }
+    );
+
+    expect(reminders.find((item) => item.id === "smart:morning:2026-10-04")).toMatchObject({
+      dueAt: "2026-10-04T04:30:00.000Z",
+      title: "صباح الخير، هذا دوامك اليوم",
+      body: "محاضرة واحدة · أولها هندسة البرمجيات الساعة 9:00 ص"
+    });
+  });
+
+  it("يبني تذكيرًا لأحداث التقويم الجامعي قبل يوم", () => {
+    const reminders = buildPushReminders(
+      snapshot(),
+      new Date("2026-10-01T00:00:00.000Z"),
+      {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        classReminders: false,
+        academicCalendar: true
+      }
+    );
+
+    expect(reminders.find((item) => item.id === "smart:calendar:2026-10-04")).toEqual({
+      id: "smart:calendar:2026-10-04",
+      dueAt: "2026-10-03T15:00:00.000Z",
+      title: "مواعيد جامعية مهمة غدًا",
+      body: "بداية العام الجامعي وبدء دوام أعضاء هيئة التدريس • فترة السحب والإضافة • فترة الامتحانات التعويضية (غير المكتمل والتكميلي)",
+      url: "/calendar"
+    });
+  });
+
+  it("يبني إشعار انتهاء الدوام بعد آخر محاضرة", () => {
+    const reminders = buildPushReminders(
+      snapshot(),
+      new Date("2026-10-03T12:00:00.000Z"),
+      {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        classReminders: false,
+        dayComplete: true
+      }
+    );
+
+    expect(reminders.find((item) => item.id === "smart:complete:2026-10-04")).toMatchObject({
+      dueAt: "2026-10-04T07:10:00.000Z",
+      title: "خلص دوامك لليوم"
+    });
   });
 
   it("يفك مفتاح VAPID بصيغة base64url", () => {

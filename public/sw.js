@@ -1,5 +1,5 @@
-const SHELL_CACHE = "murattab-shell-v5";
-const RUNTIME_CACHE = "murattab-runtime-v5";
+const SHELL_CACHE = "murattab-shell-v6";
+const RUNTIME_CACHE = "murattab-runtime-v6";
 const PRECACHE_OFFLINE = ["/offline", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -134,7 +134,7 @@ self.addEventListener("push", (event) => {
       dir: "rtl",
       lang: "ar",
       tag,
-      renotify: true,
+      renotify: false,
       data: { url }
     })
   );
