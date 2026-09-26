@@ -9,6 +9,7 @@ export interface TtuApiConfig {
   calendarPath: string | null;
   courseCatalogPath: string | null;
   studentSchedulePath: string | null;
+  studentAuthMode: "disabled" | "delegated-bearer";
 }
 
 function positiveInteger(raw: string | undefined, fallback: number): number {
@@ -32,10 +33,26 @@ export function readTtuApiConfig(env: NodeJS.ProcessEnv = process.env): TtuApiCo
     cacheTtlMs: positiveInteger(env.TTU_API_CACHE_TTL_MS, 15 * 60_000),
     calendarPath: clean(env.TTU_API_CALENDAR_PATH),
     courseCatalogPath: clean(env.TTU_API_COURSE_CATALOG_PATH),
-    studentSchedulePath: clean(env.TTU_API_STUDENT_SCHEDULE_PATH)
+    studentSchedulePath: clean(env.TTU_API_STUDENT_SCHEDULE_PATH),
+    studentAuthMode: env.TTU_API_STUDENT_AUTH_MODE?.trim().toLowerCase() === "delegated-bearer"
+      ? "delegated-bearer"
+      : "disabled"
   };
 }
 
 export function isTtuCalendarApiConfigured(config: TtuApiConfig): boolean {
   return Boolean(config.enabled && config.baseUrl && config.calendarPath);
+}
+
+export function isTtuCourseCatalogApiConfigured(config: TtuApiConfig): boolean {
+  return Boolean(config.enabled && config.baseUrl && config.courseCatalogPath);
+}
+
+export function isTtuStudentScheduleApiConfigured(config: TtuApiConfig): boolean {
+  return Boolean(
+    config.enabled
+    && config.baseUrl
+    && config.studentSchedulePath
+    && config.studentAuthMode === "delegated-bearer"
+  );
 }
