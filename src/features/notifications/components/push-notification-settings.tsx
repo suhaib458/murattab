@@ -92,12 +92,34 @@ export function PushNotificationSettings({
   );
 
   useEffect(() => {
-    setPreferences(getNotificationPreferences());
-    setNeedsIosInstall(isIosDevice() && !isStandaloneApp());
+    let active = true;
 
-    void getPushStatus()
-      .then(setStatus)
-      .catch(() => setStatus("unavailable"));
+    const refreshDeviceStatus = () => {
+      if (!active) return;
+      setPreferences(getNotificationPreferences());
+      setNeedsIosInstall(isIosDevice() && !isStandaloneApp());
+      void getPushStatus()
+        .then((next) => {
+          if (active) setStatus(next);
+        })
+        .catch(() => {
+          if (active) setStatus("unavailable");
+        });
+    };
+
+    refreshDeviceStatus();
+
+    const handleReturn = () => {
+      if (document.visibilityState === "visible") refreshDeviceStatus();
+    };
+
+    window.addEventListener("focus", refreshDeviceStatus);
+    document.addEventListener("visibilitychange", handleReturn);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshDeviceStatus);
+      document.removeEventListener("visibilitychange", handleReturn);
+    };
   }, []);
 
   const enable = async () => {
