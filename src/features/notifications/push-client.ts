@@ -522,9 +522,14 @@ function calendarReminderTitle(kind: AcademicCalendar["events"][number]["kind"])
   return "تحديث من التقويم الجامعي";
 }
 
-function buildAcademicCalendarReminders(start: string, end: string, now: Date): PushReminder[] {
-  const grouped = new Map<string, typeof ttuAcademicCalendar.events>();
-  for (const event of ttuAcademicCalendar.events) {
+function buildAcademicCalendarReminders(
+  start: string,
+  end: string,
+  now: Date,
+  calendar: AcademicCalendar
+): PushReminder[] {
+  const grouped = new Map<string, AcademicCalendar["events"]>();
+  for (const event of calendar.events) {
     if (event.startsOn < start || event.startsOn > end) continue;
     grouped.set(event.startsOn, [...(grouped.get(event.startsOn) ?? []), event]);
   }
