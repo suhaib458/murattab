@@ -42,6 +42,8 @@ export const TtuCourseSectionSchema = z.object({
   sessions: z.array(TtuCatalogSessionSchema)
 });
 
+export type TtuCourseSection = z.infer<typeof TtuCourseSectionSchema>;
+
 export const TtuCatalogCourseSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
@@ -81,6 +83,8 @@ export const TtuStudentScheduleCourseSchema = z.object({
   creditHours: z.number().nonnegative().optional(),
   sessions: z.array(TtuCatalogSessionSchema)
 });
+
+export type TtuStudentScheduleCourse = z.infer<typeof TtuStudentScheduleCourseSchema>;
 
 export const TtuStudentScheduleSchema = z.object({
   schemaVersion: z.literal(1),
