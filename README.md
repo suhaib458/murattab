@@ -294,6 +294,7 @@ http://localhost:3000
 | `TTU_API_CALENDAR_PATH` | Official academic-calendar resource path |
 | `TTU_API_COURSE_CATALOG_PATH` | Reserved course-catalog resource path |
 | `TTU_API_STUDENT_SCHEDULE_PATH` | Reserved student-schedule resource path |
+| `TTU_API_STUDENT_AUTH_MODE` | Student-record access mode; remains `disabled` until an approved TTU delegated login flow exists |
 | `TTU_API_TIMEOUT_MS` | TTU upstream request timeout |
 | `TTU_API_CACHE_TTL_MS` | Short server-side cache duration for official TTU data |
 
@@ -386,6 +387,7 @@ Possible future expansion, after validating the TTU version:
 - More resilient distributed AI quota management
 - Official university/API integrations when available and authorized
 - TTU API foundation is already prepared behind a disabled-by-default server adapter with the current verified calendar kept as fallback
+- Course catalog/sections and student-schedule contracts are prepared for future authorized TTU integration without changing local-first storage
 
 ---
 
