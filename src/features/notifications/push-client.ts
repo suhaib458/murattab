@@ -2,7 +2,7 @@ import type { AppSnapshot } from "@/repositories/schedule-repository";
 import type { ClassSession, Course, DayCode } from "@/domain/models";
 import type { PushReminder, PushSubscriptionPayload } from "@/domain/push";
 import { ttuAcademicCalendar } from "@/domain/calendar";
-import { formatArabicTime } from "@/domain/schedule";
+import { formatArabicDuration, formatArabicTime } from "@/domain/schedule";
 
 const DEVICE_KEY = "murattab-push-device-v1";
 const SYNC_KEY = "murattab-push-sync-v1";
@@ -421,7 +421,7 @@ function buildClassReminders(
         title: isStartingNow ? "موعد محاضرتك الآن" : "محاضرتك قربت",
         body: isStartingNow
           ? `${course.name} تبدأ الآن · ${session.room.label}`
-          : `${course.name} تبدأ بعد ${course.reminder.minutesBefore} دقيقة · ${session.room.label}`,
+          : `${course.name} تبدأ بعد ${formatArabicDuration(course.reminder.minutesBefore)} · ${session.room.label}`,
         url: "/schedule"
       });
     }
