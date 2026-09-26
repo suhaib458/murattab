@@ -1,0 +1,29 @@
+name: TTU API validate
+
+on:
+  push:
+    branches:
+      - feat/ttu-api-foundation
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        run: pnpm build
