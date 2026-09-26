@@ -60,6 +60,11 @@ describe("إشعارات الجهاز", () => {
     expect(JSON.stringify(reminders)).not.toContain("طالب");
   });
 
+  it("يصيغ مدة التذكير الطويلة بالعربية بدل عرض عدد دقائق كبير", () => {
+    const reminders = buildPushReminders(snapshot(true, 60), new Date("2026-10-01T00:00:00.000Z"));
+    expect(reminders[0].body).toContain("تبدأ بعد ساعة");
+  });
+
   it("يصيغ إشعار بدء المحاضرة الآن بصيغة واضحة", () => {
     const reminders = buildPushReminders(snapshot(true, 0), new Date("2026-10-01T00:00:00.000Z"));
 
