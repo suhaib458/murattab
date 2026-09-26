@@ -11,6 +11,12 @@ export class TtuApiError extends Error {
   }
 }
 
+export interface TtuApiCredentialOverride {
+  token: string;
+  header?: string;
+  prefix?: string;
+}
+
 function resolveApiUrl(config: TtuApiConfig, path: string): URL {
   if (!config.baseUrl) throw new TtuApiError("TTU API base URL is missing", "CONFIG");
 
@@ -36,21 +42,24 @@ function resolveApiUrl(config: TtuApiConfig, path: string): URL {
   return resolved;
 }
 
-export async function fetchTtuApiJson(
+async function requestTtuApiJson(
   config: TtuApiConfig,
   path: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch,
+  credentialOverride?: TtuApiCredentialOverride
 ): Promise<unknown> {
   const url = resolveApiUrl(config, path);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
   const headers = new Headers({ Accept: "application/json" });
-  if (config.token) {
-    const value = config.authPrefix
-      ? `${config.authPrefix} ${config.token}`
-      : config.token;
-    headers.set(config.authHeader, value);
+
+  const token = credentialOverride?.token ?? config.token;
+  if (token) {
+    const header = credentialOverride?.header ?? config.authHeader;
+    const prefix = credentialOverride?.prefix ?? config.authPrefix;
+    const value = prefix ? `${prefix} ${token}` : token;
+    headers.set(header, value);
   }
 
   try {
@@ -79,4 +88,21 @@ export async function fetchTtuApiJson(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchTtuApiJson(
+  config: TtuApiConfig,
+  path: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<unknown> {
+  return requestTtuApiJson(config, path, fetchImpl);
+}
+
+export async function fetchTtuApiJsonWithCredential(
+  config: TtuApiConfig,
+  path: string,
+  credential: TtuApiCredentialOverride,
+  fetchImpl: typeof fetch = fetch
+): Promise<unknown> {
+  return requestTtuApiJson(config, path, fetchImpl, credential);
 }
