@@ -1,6 +1,8 @@
 import { TtuIntegrationStatusSchema } from "@/domain/ttu-api";
 import {
   isTtuCalendarApiConfigured,
+  isTtuCourseCatalogApiConfigured,
+  isTtuStudentScheduleApiConfigured,
   readTtuApiConfig
 } from "@/server/ttu-api/config";
 
@@ -9,15 +11,18 @@ export const runtime = "nodejs";
 export async function GET() {
   const config = readTtuApiConfig();
   const academicCalendar = isTtuCalendarApiConfigured(config);
+  const courseCatalog = isTtuCourseCatalogApiConfigured(config);
+  const studentSchedule = isTtuStudentScheduleApiConfigured(config);
+  const hasAnyOfficialCapability = academicCalendar || courseCatalog || studentSchedule;
 
   const status = TtuIntegrationStatusSchema.parse({
     universityId: "ttu",
-    mode: academicCalendar ? "api-with-static-fallback" : "static-only",
+    mode: hasAnyOfficialCapability ? "api-with-static-fallback" : "static-only",
     enabled: config.enabled,
     capabilities: {
       academicCalendar,
-      courseCatalog: Boolean(config.enabled && config.baseUrl && config.courseCatalogPath),
-      studentSchedule: Boolean(config.enabled && config.baseUrl && config.studentSchedulePath)
+      courseCatalog,
+      studentSchedule
     }
   });
 
