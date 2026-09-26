@@ -5,7 +5,7 @@ import {
   resetTtuAcademicCalendarCacheForTests,
   resolveTtuAcademicCalendar
 } from "@/server/ttu-api/calendar-service";
-import { fetchTtuApiJson, TtuApiError } from "@/server/ttu-api/client";
+import { fetchTtuApiJson } from "@/server/ttu-api/client";
 import { readTtuApiConfig, type TtuApiConfig } from "@/server/ttu-api/config";
 
 const configured: TtuApiConfig = {
@@ -106,7 +106,7 @@ describe("TTU API foundation", () => {
         "https://evil.example/calendar",
         fetchImpl
       )
-    ).rejects.toMatchObject<TtuApiError>({ code: "INVALID_URL" });
+    ).rejects.toMatchObject({ code: "INVALID_URL" });
 
     expect(fetchImpl).not.toHaveBeenCalled();
   });
