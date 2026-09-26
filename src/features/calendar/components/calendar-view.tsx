@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AcademicCalendarEvent, DayCode } from "@/domain/models";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/domain/schedule";
 import { getEventsOnDate, getSessionsOnAcademicDate, ttuAcademicCalendar } from "@/domain/calendar";
 import { SessionList } from "@/components/shared/session-list";
+import { getPreferredAcademicCalendar } from "@/features/calendar/academic-calendar-source";
 
 function toIsoDateLocal(d: Date): string {
   const y = d.getFullYear();
@@ -56,6 +57,19 @@ export function CalendarView({ data }: { data: AppSnapshot }) {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDayNum, setSelectedDayNum] = useState<number>(() => new Date().getDate());
+  const [academicCalendar, setAcademicCalendar] = useState(ttuAcademicCalendar);
+
+  useEffect(() => {
+    let active = true;
+
+    void getPreferredAcademicCalendar().then((calendar) => {
+      if (active) setAcademicCalendar(calendar);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -78,7 +92,7 @@ export function CalendarView({ data }: { data: AppSnapshot }) {
   const selectedDaySessions = sortSessions(
     getSessionsOnAcademicDate(data.sessions, data.courses, data.terms, selectedIsoDate)
   );
-  const selectedEvents = getEventsOnDate(ttuAcademicCalendar.events, selectedIsoDate);
+  const selectedEvents = getEventsOnDate(academicCalendar.events, selectedIsoDate);
 
   const isToday = (dayNum: number) => {
     const today = new Date();
@@ -119,7 +133,7 @@ export function CalendarView({ data }: { data: AppSnapshot }) {
             const sessionCount = cellDayCode
               ? getSessionsOnAcademicDate(data.sessions, data.courses, data.terms, cellIsoDate).length
               : 0;
-            const cellEvents = getEventsOnDate(ttuAcademicCalendar.events, cellIsoDate);
+            const cellEvents = getEventsOnDate(academicCalendar.events, cellIsoDate);
             const isSelected = safeSelected === date;
 
             return (
