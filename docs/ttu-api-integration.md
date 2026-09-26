@@ -77,6 +77,7 @@ TTU_API_CACHE_TTL_MS=900000
 TTU_API_CALENDAR_PATH=
 TTU_API_COURSE_CATALOG_PATH=
 TTU_API_STUDENT_SCHEDULE_PATH=
+TTU_API_STUDENT_AUTH_MODE=disabled
 ```
 
 Authentication is configurable because the official TTU API contract is not available yet. For example, a future university integration could use a Bearer token or a custom header without exposing credentials to client code.
@@ -113,14 +114,107 @@ The route is server-cached for a short configurable period, so the app can pick 
 
 A later phase can add a scheduled server sync/database snapshot if TTU requires polling independent of app traffic. That is intentionally not enabled before the university contract and usage limits are known.
 
+## Course catalog and sections foundation
+
+Murattab now has a normalized server-side contract for the official course catalog and offered sections.
+
+Prepared route:
+
+`GET /api/ttu/course-catalog`
+
+This route is dormant unless `TTU_API_ENABLED=true` and `TTU_API_COURSE_CATALOG_PATH` is configured. It does not replace any current feature or local schedule data.
+
+The normalized contract separates course information from offered sections:
+
+```json
+{
+  "schemaVersion": 1,
+  "universityId": "ttu",
+  "academicYear": "2026/2027",
+  "term": "first",
+  "courses": [
+    {
+      "code": "COURSE-CODE",
+      "name": "اسم المادة",
+      "creditHours": 3,
+      "sections": [
+        {
+          "id": "SECTION-ID",
+          "number": "1",
+          "instructorName": "اختياري",
+          "capacity": 40,
+          "enrolled": 32,
+          "sessions": [
+            {
+              "day": "ح",
+              "startsAt": "09:00",
+              "endsAt": "10:00",
+              "room": "207 م",
+              "kind": "lecture"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+The exact raw TTU JSON can be different. Once the university publishes its documentation, only the server adapter in `src/server/ttu-api/course-catalog-service.ts` needs to map those fields into this normalized contract.
+
+Catalog data may be cached for the configured short TTL because it is not student-specific.
+
+## Student schedule foundation
+
+Prepared route:
+
+`GET /api/ttu/student-schedule`
+
+Student records are **disabled by default**. The route becomes ready only when all of the following are configured:
+
+- `TTU_API_ENABLED=true`
+- `TTU_API_STUDENT_SCHEDULE_PATH`
+- `TTU_API_STUDENT_AUTH_MODE=delegated-bearer`
+
+The prepared delegated mode intentionally does not accept a student number in a query parameter. The university endpoint must identify the student from the authorized short-lived Bearer credential. This prevents a future client from asking Murattab for another student's schedule merely by changing an ID.
+
+The credential is forwarded for that request only. Murattab does not add it to local storage, the normalized response, or cache.
+
+The normalized response also intentionally excludes student profile fields:
+
+```json
+{
+  "schemaVersion": 1,
+  "universityId": "ttu",
+  "academicYear": "2026/2027",
+  "term": "first",
+  "courses": [
+    {
+      "code": "COURSE-CODE",
+      "name": "اسم المادة",
+      "sectionId": "SECTION-ID",
+      "sessions": []
+    }
+  ]
+}
+```
+
+If the upstream API returns unrelated personal fields, the validation boundary strips them from the response Murattab uses.
+
+## Reusing the current review-before-save flow
+
+Official data will not overwrite a student's local schedule silently.
+
+`src/domain/ttu-api-schedule-adapter.ts` converts either:
+
+- the full official student schedule, or
+- one selected official catalog section,
+
+into Murattab's existing `ScheduleExtractionResult` contract. This means a future official-import button can reuse the same review, conflict checking, duplicate handling, room normalization, and explicit approval flow already used by Smart Import.
+
+Current IndexedDB data and Smart Import remain unchanged.
+
 ## Future data that can use the same integration layer
-
-The configuration already reserves paths for:
-
-- course catalog / offered sections,
-- student schedule.
-
-No student-record endpoint is exposed by Murattab yet. That is deliberate: student data requires the university's authentication, authorization, privacy, and consent requirements to be known first.
 
 If TTU provides authorized APIs later, the same server-only pattern can support:
 
@@ -152,7 +246,10 @@ A webhook would be preferable for urgent updates because TTU could notify Muratt
 
 ## Security guarantees in this foundation
 
-- TTU credentials remain server-side.
+- TTU service credentials remain server-side.
+- Student delegated credentials are accepted only for the student-schedule request and are not cached or returned.
+- The student-schedule route requires a same-origin Murattab request marker before attempting upstream access.
+- The prepared student endpoint does not accept an arbitrary student ID.
 - Resource URLs must stay on the configured TTU API origin.
 - Non-local production API URLs must use HTTPS.
 - Requests use a configurable timeout.
