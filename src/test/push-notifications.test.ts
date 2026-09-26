@@ -123,11 +123,11 @@ describe("إشعارات الجهاز", () => {
       }
     );
 
-    expect(reminders.find((item) => item.id === "smart:calendar:ttu-2026-2027-first-001")).toEqual({
-      id: "smart:calendar:ttu-2026-2027-first-001",
+    expect(reminders.find((item) => item.id === "smart:calendar:2026-10-04")).toEqual({
+      id: "smart:calendar:2026-10-04",
       dueAt: "2026-10-03T15:00:00.000Z",
-      title: "تحديث من التقويم الجامعي",
-      body: "غدًا: بداية العام الجامعي وبدء دوام أعضاء هيئة التدريس",
+      title: "مواعيد جامعية مهمة غدًا",
+      body: "بداية العام الجامعي وبدء دوام أعضاء هيئة التدريس • فترة السحب والإضافة • فترة الامتحانات التعويضية (غير المكتمل والتكميلي)",
       url: "/calendar"
     });
   });
