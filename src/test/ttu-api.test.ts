@@ -18,7 +18,8 @@ const configured: TtuApiConfig = {
   cacheTtlMs: 15 * 60_000,
   calendarPath: "calendar/current",
   courseCatalogPath: null,
-  studentSchedulePath: null
+  studentSchedulePath: null,
+  studentAuthMode: "disabled"
 };
 
 afterEach(() => {
@@ -123,5 +124,6 @@ describe("TTU API foundation", () => {
     expect(config.calendarPath).toBe("/calendar");
     expect(config.authHeader).toBe("Authorization");
     expect(config.authPrefix).toBe("Bearer");
+    expect(config.studentAuthMode).toBe("disabled");
   });
 });
