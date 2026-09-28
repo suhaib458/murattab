@@ -264,6 +264,8 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
       const response = await POST(request);
       expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("15");
+      expect(response.headers.get("X-Murattab-Analysis-Retryable")).toBe("true");
 
       const body = await response.json();
       expect(body.success).toBe(false);
@@ -355,6 +357,8 @@ describe("API Route Handler: POST /api/schedule/extract", () => {
 
     const response = await POST(request);
     expect(response.status).toBe(504);
+    expect(response.headers.get("Retry-After")).toBe("15");
+    expect(response.headers.get("X-Murattab-Analysis-Retryable")).toBe("true");
 
     const body = await response.json();
     expect(body.success).toBe(false);

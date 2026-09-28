@@ -18,6 +18,8 @@ interface ImportDialogProps {
 }
 
 type DialogStep = "upload" | "analyzing" | "review";
+const MAX_AUTOMATIC_RETRIES = 1;
+const MAX_AUTOMATIC_RETRY_DELAY_SECONDS = 65;
 
 export interface EditableSession {
   id: string;
@@ -132,6 +134,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
   // Attempt generation token & references for honest cancellation
   const analysisAttemptRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Review state
   const [extractedCourses, setExtractedCourses] = useState<EditableCourse[]>([]);
@@ -153,6 +156,9 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
     };
   }, [previewUrl]);
 
@@ -163,6 +169,10 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+    }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
     }
     setErrorMessage(null);
     setCloudConsent(false);
@@ -213,7 +223,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
   };
 
   // API extraction for images and PDFs (via POST /api/schedule/extract)
-  const startCloudExtraction = async () => {
+  const startCloudExtraction = async (automaticRetry = 0) => {
     if (!file) {
       setErrorMessage("يرجى اختيار ملف أولاً.");
       return;
@@ -278,6 +288,27 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
                   : "request_rejected",
           http_status: res.status
         });
+
+        const retryAfterSeconds = Number.parseInt(res.headers.get("Retry-After") || "", 10);
+        const canRetryAutomatically =
+          res.headers.get("X-Murattab-Analysis-Retryable") === "true" &&
+          Number.isFinite(retryAfterSeconds) &&
+          retryAfterSeconds > 0 &&
+          retryAfterSeconds <= MAX_AUTOMATIC_RETRY_DELAY_SECONDS &&
+          automaticRetry < MAX_AUTOMATIC_RETRIES;
+
+        if (canRetryAutomatically) {
+          setAnalyzingStage(
+            `الخدمة مشغولة مؤقتًا. ستتم إعادة المحاولة تلقائيًا خلال ${retryAfterSeconds} ثانية…`
+          );
+          retryTimerRef.current = setTimeout(() => {
+            if (currentAttempt === analysisAttemptRef.current) {
+              void startCloudExtraction(automaticRetry + 1);
+            }
+          }, retryAfterSeconds * 1000);
+          return;
+        }
+
         setErrorMessage(msg);
         setStep("upload");
         return;
@@ -319,6 +350,10 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
 
   const cancelAnalysis = () => {
     analysisAttemptRef.current += 1;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -718,7 +753,7 @@ export function ImportDialog({ data, repo, close, saved, notify }: ImportDialogP
                   type="button"
                   className="button"
                   disabled={!cloudConsent}
-                  onClick={startCloudExtraction}
+                  onClick={() => void startCloudExtraction()}
                 >
                   بدء التحليل الذكي
                 </button>
