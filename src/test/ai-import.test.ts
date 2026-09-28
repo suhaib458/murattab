@@ -477,7 +477,7 @@ describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", ()
     expect(callCount).toBe(3);
   });
 
-  it("retries 429 rate limit error up to 3 bounded attempts and throws GEMINI_RATE_LIMITED", async () => {
+  it("does not multiply a 429 quota response across fallback models", async () => {
     let callCount = 0;
     const mockFetch429 = (async () => {
       callCount++;
@@ -497,7 +497,7 @@ describe("Smart Schedule Import - Gemini Model Configuration & 404 Handling", ()
       })
     ).rejects.toThrow("GEMINI_RATE_LIMITED");
 
-    expect(callCount).toBe(3);
+    expect(callCount).toBe(1);
   });
 
   it("does NOT retry 400, 401, 403, or 404 errors (fails immediately after 1 attempt)", async () => {

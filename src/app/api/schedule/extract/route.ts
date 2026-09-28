@@ -12,6 +12,7 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const PROVIDER_RETRY_AFTER_SECONDS = 15;
 
 function isTrustedMurattabRequest(request: Request): boolean {
   const expectedOrigin = new URL(request.url).origin;
@@ -144,7 +145,12 @@ export async function POST(request: Request) {
           status: 429,
           headers: {
             "Cache-Control": "private, no-store",
-            "Retry-After": String(retryAfterSeconds)
+            "Retry-After": String(retryAfterSeconds),
+            // Only short, global cooldowns should be retried automatically by
+            // the client. A per-client limit may last several minutes.
+            "X-Murattab-Analysis-Retryable": String(
+              error instanceof AiUsageGuardError && error.scope === "global"
+            )
           }
         }
       );
@@ -188,7 +194,14 @@ export async function POST(request: Request) {
           success: false,
           error: "خدمة التحليل الذكي غير متاحة مؤقتًا أو مشغولة لدى مزود الخدمة. حاول مرة أخرى بعد قليل."
         },
-        { status: 503 }
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Retry-After": String(PROVIDER_RETRY_AFTER_SECONDS),
+            "X-Murattab-Analysis-Retryable": "true"
+          }
+        }
       );
     }
 
@@ -263,7 +276,14 @@ export async function POST(request: Request) {
     if (error.message === "AI_PROVIDER_TIMEOUT") {
       return NextResponse.json(
         { success: false, error: "استغرق تحليل الجدول وقتاً طويلاً. يرجى إعادة المحاولة أو التحقق من جودة الاتصال." },
-        { status: 504 }
+        {
+          status: 504,
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Retry-After": String(PROVIDER_RETRY_AFTER_SECONDS),
+            "X-Murattab-Analysis-Retryable": "true"
+          }
+        }
       );
     }
 

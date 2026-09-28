@@ -18,7 +18,10 @@ export const DEFAULT_GEMINI_FALLBACK_MODELS = [
   "gemini-3.6-flash"
 ] as const;
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-export const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+// A model fallback is useful for a temporarily unavailable model, but not for
+// a 429 response. Trying two more models after a quota response multiplies
+// the user's failed request and makes a shared quota recover more slowly.
+export const RETRYABLE_STATUS_CODES = new Set([408, 500, 502, 503, 504]);
 export const MAX_RETRY_ATTEMPTS = 3;
 export const DEFAULT_AI_PROVIDER_TIMEOUT_MS = 50_000;
 export const MAX_ALLOWED_TIMEOUT_MS = 58_000;

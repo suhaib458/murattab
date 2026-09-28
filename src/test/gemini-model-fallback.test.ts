@@ -86,4 +86,28 @@ describe("Gemini schedule extraction - model failover", () => {
 
     expect(callCount).toBe(1);
   });
+
+  it("does not multiply a provider quota response across fallback models", async () => {
+    let callCount = 0;
+    const mockFetch = (async () => {
+      callCount += 1;
+      return new Response("Too many requests", { status: 429 });
+    }) as typeof fetch;
+
+    const extractor = new GeminiScheduleExtractor({
+      apiKey: "test-key",
+      fetchFn: mockFetch,
+      retryDelaysMs: [1, 1]
+    });
+
+    await expect(
+      extractor.extract({
+        fileName: "schedule.png",
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: "image/png"
+      })
+    ).rejects.toThrow("GEMINI_RATE_LIMITED");
+
+    expect(callCount).toBe(1);
+  });
 });
