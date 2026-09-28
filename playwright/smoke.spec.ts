@@ -44,6 +44,95 @@ test("شاشة البداية تنتهي تلقائيًا أو عند النقر
   await expect(splash).toBeHidden({ timeout: 8000 });
 });
 
+test("الهاتف يخرج من شاشة البداية حتى إذا توقف الفيديو بدون ended أو error", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "هذا السيناريو خاص بفيديو شاشة البداية على الهاتف.");
+
+  // Production is HTTPS, while the local Playwright server is plain HTTP.
+  // Strip only the local test's CSP upgrade directive so WebKit does not
+  // rewrite http://127.0.0.1 assets to HTTPS and fail the TLS handshake.
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const headers = response.headers();
+    const csp = headers["content-security-policy"];
+    if (csp) {
+      headers["content-security-policy"] = csp
+        .split(";")
+        .map((directive) => directive.trim())
+        .filter((directive) => directive !== "upgrade-insecure-requests")
+        .join("; ");
+    }
+    await route.fulfill({ response, headers });
+  });
+
+  await page.goto("/");
+  const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
+  await expect(splash).toBeVisible({ timeout: 10000 });
+
+  const video = page.locator(".splash video");
+  await expect(video).toHaveCount(1);
+
+  // Wait until the client component is hydrated so this test exercises the
+  // watchdog rather than merely pausing the server-rendered <video>.
+  await expect(splash).toHaveAttribute("data-client-ready", "true", { timeout: 5000 });
+
+  // Simulate the WebKit/Safari failure mode reported in production: media
+  // playback stops, but the element does not emit ended/error.
+  await video.evaluate((element: HTMLVideoElement) => {
+    element.pause();
+  });
+
+  await expect(splash).toBeHidden({ timeout: 12000 });
+});
+
+test("الهاتف يعرض إعادة المحاولة إذا تعذر تحميل JavaScript قبل hydration", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "هذا السيناريو خاص بمسار التعافي قبل hydration على الهاتف.");
+
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      const accelerated = typeof timeout === "number" && timeout >= 10_000 ? 120 : timeout;
+      return nativeSetTimeout(handler, accelerated, ...args);
+    }) as typeof window.setTimeout;
+  });
+
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    const url = request.url();
+
+    if (url.includes("/_next/static/chunks/") && url.endsWith(".js")) {
+      await route.abort("failed");
+      return;
+    }
+
+    if (request.resourceType() === "document") {
+      const response = await route.fetch();
+      const headers = response.headers();
+      const csp = headers["content-security-policy"];
+      if (csp) {
+        headers["content-security-policy"] = csp
+          .split(";")
+          .map((directive) => directive.trim())
+          .filter((directive) => directive !== "upgrade-insecure-requests")
+          .join("; ");
+      }
+      await route.fulfill({ response, headers });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "تعذّر تحميل مرتب" })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole("button", { name: "إعادة المحاولة" })).toBeVisible();
+});
+
 test("onboarding ثم إضافة مادة وتعديلها وحذفها", async ({ page }) => {
   test.slow();
   await page.goto("/");
