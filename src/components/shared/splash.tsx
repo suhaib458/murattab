@@ -1,19 +1,35 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const MOBILE_QUERY = "(max-width: 768px)";
+const MOBILE_SPLASH_FAILSAFE_MS = 10_000;
 
 export function Splash({ onDismiss }: { onDismiss: () => void }) {
-  useEffect(() => {
-    if (window.matchMedia(MOBILE_QUERY).matches) return;
-    const timer = window.setTimeout(onDismiss, 900);
-    return () => window.clearTimeout(timer);
+  const dismissedRef = useRef(false);
+
+  const finishSplash = useCallback(() => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    onDismiss();
   }, [onDismiss]);
 
+  useEffect(() => {
+    if (window.matchMedia(MOBILE_QUERY).matches) {
+      // iOS Safari can occasionally leave a media element buffering/stalled
+      // without firing either `ended` or `error`. Keep the normal video
+      // experience untouched, but never let the splash become an infinite gate.
+      const failsafe = window.setTimeout(finishSplash, MOBILE_SPLASH_FAILSAFE_MS);
+      return () => window.clearTimeout(failsafe);
+    }
+
+    const timer = window.setTimeout(finishSplash, 900);
+    return () => window.clearTimeout(timer);
+  }, [finishSplash]);
+
   const finishMobileSplash = () => {
-    if (window.matchMedia(MOBILE_QUERY).matches) onDismiss();
+    if (window.matchMedia(MOBILE_QUERY).matches) finishSplash();
   };
 
   return (
@@ -37,6 +53,7 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
             });
             finishMobileSplash();
           }}
+          onAbort={finishMobileSplash}
         >
           <source src="/brand/splash.mp4" type="video/mp4" media={MOBILE_QUERY} />
         </video>
