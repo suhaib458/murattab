@@ -54,7 +54,10 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
-  const showSplash = !splashFinished || (!data && !loadError);
+  // The splash is a visual intro only. Local storage loading runs in parallel,
+  // but it must never be allowed to keep the user trapped on the video after
+  // the intro has ended or its safety timeout has fired.
+  const showSplash = !splashFinished;
 
   const refresh = useCallback(async () => {
     setData(await repo.snapshot());
