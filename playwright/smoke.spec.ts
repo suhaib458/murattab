@@ -44,6 +44,26 @@ test("شاشة البداية تنتهي تلقائيًا أو عند النقر
   await expect(splash).toBeHidden({ timeout: 8000 });
 });
 
+test("الهاتف يخرج من شاشة البداية حتى إذا توقف الفيديو بدون ended أو error", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "هذا السيناريو خاص بفيديو شاشة البداية على الهاتف.");
+
+  await page.goto("/");
+  const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
+  await expect(splash).toBeVisible({ timeout: 10000 });
+
+  const video = page.locator(".splash video");
+  await expect(video).toHaveCount(1);
+
+  // Simulate the WebKit/Safari failure mode reported in production: media
+  // playback stops, but the element does not emit ended/error.
+  await video.evaluate((element: HTMLVideoElement) => {
+    element.pause();
+  });
+
+  await expect(splash).toBeHidden({ timeout: 12000 });
+  await expect(page.getByRole("heading", { name: "لنرتّب فصلك الدراسي" })).toBeVisible({ timeout: 3000 });
+});
+
 test("onboarding ثم إضافة مادة وتعديلها وحذفها", async ({ page }) => {
   test.slow();
   await page.goto("/");
