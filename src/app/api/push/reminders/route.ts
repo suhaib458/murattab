@@ -11,13 +11,20 @@ export const runtime = "nodejs";
 
 export async function PUT(request: Request) {
   if (!requestOriginIsAllowed(request)) return Response.json({ error: "طلب غير مسموح." }, { status: 403 });
-  const limited = checkPushRateLimit(request, "reminders", { limit: 20, windowMs: 10 * 60_000 });
-  if (limited) return limited;
 
   try {
     const parsed = PushSyncRequestSchema.safeParse(await request.json());
     if (!parsed.success) return Response.json({ error: "بيانات التذكيرات غير صالحة." }, { status: 400 });
     const { deviceId, deviceToken, reminders } = parsed.data;
+
+    const limited = checkPushRateLimit(
+      request,
+      "reminders-device",
+      { limit: 20, windowMs: 10 * 60_000 },
+      deviceId
+    );
+    if (limited) return limited;
+
     await authenticatePushDevice(deviceId, deviceToken);
 
     await supabaseRest<void>("rpc/replace_push_reminders", {

@@ -134,8 +134,7 @@ export function PushNotificationSettings({
       preferencesRef.current = storedPreferences;
       setPreferences(storedPreferences);
       setStatus("enabled");
-      await sendTestPushNotification();
-      notify("تم تفعيل إشعارات مرتب وإرسال إشعار تجريبي لهذا الجهاز.");
+      notify("تم تفعيل إشعارات مرتب على هذا الجهاز. استخدم زر «تجربة» إذا حبيت تتأكد منها.");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "تعذّر تفعيل الإشعارات.";
       setError(message);
