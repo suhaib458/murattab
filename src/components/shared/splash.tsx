@@ -18,6 +18,11 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
 
   useEffect(() => {
     setClientReady(true);
+    try {
+      sessionStorage.removeItem("murattab-splash-recovery-v1");
+    } catch {
+      // Recovery state is best-effort in restricted storage environments.
+    }
 
     if (window.matchMedia(MOBILE_QUERY).matches) {
       // iOS Safari can occasionally leave a media element buffering/stalled
@@ -41,6 +46,7 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="شاشة بدء مرتب"
+      data-murattab-splash="true"
       data-client-ready={clientReady ? "true" : "false"}
     >
       <div className="splash-mobile-video">
