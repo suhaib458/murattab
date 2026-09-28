@@ -16,14 +16,25 @@ type DeviceRow = { id: string; token_hash: string };
 
 export async function POST(request: Request) {
   if (!requestOriginIsAllowed(request)) return Response.json({ error: "طلب غير مسموح." }, { status: 403 });
-  const limited = checkPushRateLimit(request, "subscribe", { limit: 10, windowMs: 10 * 60_000 });
-  if (limited) return limited;
+
+  // Keep a generous anonymous/IP guard against abuse, but do not let a campus
+  // Wi-Fi or mobile-carrier NAT make a handful of students block everyone else.
+  const ipLimited = checkPushRateLimit(request, "subscribe-ip", { limit: 500, windowMs: 10 * 60_000 });
+  if (ipLimited) return ipLimited;
 
   try {
     const parsed = PushSubscribeRequestSchema.safeParse(await request.json());
     if (!parsed.success) return Response.json({ error: "بيانات الاشتراك غير صالحة." }, { status: 400 });
 
     const { deviceId, deviceToken, subscription } = parsed.data;
+    const deviceLimited = checkPushRateLimit(
+      request,
+      "subscribe-device",
+      { limit: 10, windowMs: 10 * 60_000 },
+      deviceId
+    );
+    if (deviceLimited) return deviceLimited;
+
     const existing = await supabaseRest<DeviceRow[]>(
       `push_devices?id=eq.${encodeURIComponent(deviceId)}&select=id,token_hash&limit=1`
     );
