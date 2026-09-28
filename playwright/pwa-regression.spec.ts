@@ -55,7 +55,7 @@ test.describe("PWA Service Worker Update & Offline Regression", () => {
 
     // Seed the runtime cache with an obviously stale navigation response for /settings
     await page.evaluate(async () => {
-      const cache = await caches.open("murattab-runtime-v3");
+      const cache = await caches.open("murattab-runtime-v6");
       const staleHtml = `
         <!DOCTYPE html>
         <html lang="ar">
@@ -72,7 +72,7 @@ test.describe("PWA Service Worker Update & Offline Regression", () => {
 
     // Confirm that the stale response was stored in cache
     const cacheHasStale = await page.evaluate(async () => {
-      const cache = await caches.open("murattab-runtime-v3");
+      const cache = await caches.open("murattab-runtime-v6");
       const match = await cache.match("/settings");
       if (!match) return false;
       const text = await match.text();
@@ -90,7 +90,7 @@ test.describe("PWA Service Worker Update & Offline Regression", () => {
 
     // Verify: the runtime cache has been refreshed with the latest network response
     const cacheRefreshed = await page.evaluate(async () => {
-      const cache = await caches.open("murattab-runtime-v3");
+      const cache = await caches.open("murattab-runtime-v6");
       const match = await cache.match("/settings");
       if (!match) return false;
       const text = await match.text();
@@ -120,12 +120,11 @@ test.describe("PWA Service Worker Update & Offline Regression", () => {
     await expect(page.getByRole("heading", { name: "الإعدادات", exact: true })).toBeVisible();
 
     // Verify /settings was cached in runtime cache
-    const isCached = await page.evaluate(async () => {
-      const cache = await caches.open("murattab-runtime-v3");
+    await expect.poll(async () => page.evaluate(async () => {
+      const cache = await caches.open("murattab-runtime-v6");
       const match = await cache.match("/settings");
       return Boolean(match);
-    });
-    expect(isCached).toBe(true);
+    })).toBe(true);
 
     // 2. Go offline
     await context.setOffline(true);
