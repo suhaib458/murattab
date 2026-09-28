@@ -47,14 +47,26 @@ test("شاشة البداية تنتهي تلقائيًا أو عند النقر
 test("الهاتف يخرج من شاشة البداية حتى إذا توقف الفيديو بدون ended أو error", async ({ page, isMobile }) => {
   test.skip(!isMobile, "هذا السيناريو خاص بفيديو شاشة البداية على الهاتف.");
 
-  page.on("console", (message) => {
-    console.log(`[mobile browser:${message.type()}] ${message.text()}`);
-  });
-  page.on("pageerror", (error) => {
-    console.log(`[mobile browser:pageerror] ${error.stack ?? error.message}`);
-  });
-  page.on("requestfailed", (request) => {
-    console.log(`[mobile browser:requestfailed] ${request.url()} :: ${request.failure()?.errorText ?? "unknown"}`);
+  // Production is HTTPS, while the local Playwright server is plain HTTP.
+  // Strip only the local test's CSP upgrade directive so WebKit does not
+  // rewrite http://127.0.0.1 assets to HTTPS and fail the TLS handshake.
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const headers = response.headers();
+    const csp = headers["content-security-policy"];
+    if (csp) {
+      headers["content-security-policy"] = csp
+        .split(";")
+        .map((directive) => directive.trim())
+        .filter((directive) => directive !== "upgrade-insecure-requests")
+        .join("; ");
+    }
+    await route.fulfill({ response, headers });
   });
 
   await page.goto("/");
