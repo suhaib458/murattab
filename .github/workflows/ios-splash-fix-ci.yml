@@ -37,8 +37,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright WebKit
+        run: pnpm exec playwright install --with-deps webkit
 
       - name: Mobile stalled-splash regression
         run: pnpm exec playwright test playwright/smoke.spec.ts --project=mobile --grep="الهاتف يخرج من شاشة البداية"
