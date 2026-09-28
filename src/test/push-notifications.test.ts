@@ -3,6 +3,7 @@ import { DEFAULT_NOTIFICATION_PREFERENCES, buildPushReminders, base64UrlToUint8A
 import type { AppSnapshot } from "@/repositories/schedule-repository";
 import { PushBroadcastRequestSchema } from "@/domain/push";
 import { hashDeviceToken, safeTokenHashMatches } from "@/server/push/supabase-rest";
+import { checkPushRateLimit } from "@/server/push/rate-limit";
 
 const termId = "22222222-2222-4222-8222-222222222222";
 const courseId = "11111111-1111-4111-8111-111111111111";
@@ -152,6 +153,34 @@ describe("إشعارات الجهاز", () => {
       dueAt: "2026-10-04T07:10:00.000Z",
       title: "خلص دوامك لليوم"
     });
+  });
+
+  it("لا يجعل الأجهزة المختلفة خلف نفس عنوان IP تحجب بعضها", () => {
+    const request = new Request("https://murattab.test/api/push/test", {
+      headers: { "x-forwarded-for": "203.0.113.10" }
+    });
+
+    expect(checkPushRateLimit(
+      request,
+      "push-shared-ip-regression",
+      { limit: 1, windowMs: 60_000 },
+      "44444444-4444-4444-8444-444444444444"
+    )).toBeNull();
+
+    expect(checkPushRateLimit(
+      request,
+      "push-shared-ip-regression",
+      { limit: 1, windowMs: 60_000 },
+      "55555555-5555-4555-8555-555555555555"
+    )).toBeNull();
+
+    const sameDeviceLimited = checkPushRateLimit(
+      request,
+      "push-shared-ip-regression",
+      { limit: 1, windowMs: 60_000 },
+      "44444444-4444-4444-8444-444444444444"
+    );
+    expect(sameDeviceLimited?.status).toBe(429);
   });
 
   it("يفك مفتاح VAPID بصيغة base64url", () => {
