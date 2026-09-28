@@ -89,6 +89,50 @@ test("الهاتف يخرج من شاشة البداية حتى إذا توقف 
   await expect(splash).toBeHidden({ timeout: 12000 });
 });
 
+test("الهاتف يعرض إعادة المحاولة إذا تعذر تحميل JavaScript قبل hydration", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "هذا السيناريو خاص بمسار التعافي قبل hydration على الهاتف.");
+
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      const accelerated = typeof timeout === "number" && timeout >= 10_000 ? 120 : timeout;
+      return nativeSetTimeout(handler, accelerated, ...args);
+    }) as typeof window.setTimeout;
+  });
+
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    const url = request.url();
+
+    if (url.includes("/_next/static/chunks/") && url.endsWith(".js")) {
+      await route.abort("failed");
+      return;
+    }
+
+    if (request.resourceType() === "document") {
+      const response = await route.fetch();
+      const headers = response.headers();
+      const csp = headers["content-security-policy"];
+      if (csp) {
+        headers["content-security-policy"] = csp
+          .split(";")
+          .map((directive) => directive.trim())
+          .filter((directive) => directive !== "upgrade-insecure-requests")
+          .join("; ");
+      }
+      await route.fulfill({ response, headers });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "تعذّر تحميل مرتب" })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole("button", { name: "إعادة المحاولة" })).toBeVisible();
+});
+
 test("onboarding ثم إضافة مادة وتعديلها وحذفها", async ({ page }) => {
   test.slow();
   await page.goto("/");
