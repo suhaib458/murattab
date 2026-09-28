@@ -14,13 +14,20 @@ type DeviceRow = StoredPushSubscription & { id: string };
 
 export async function POST(request: Request) {
   if (!requestOriginIsAllowed(request)) return Response.json({ error: "طلب غير مسموح." }, { status: 403 });
-  const limited = checkPushRateLimit(request, "test", { limit: 5, windowMs: 5 * 60_000 });
-  if (limited) return limited;
 
   try {
     const parsed = PushDeviceRequestSchema.safeParse(await request.json());
     if (!parsed.success) return Response.json({ error: "بيانات الجهاز غير صالحة." }, { status: 400 });
     const { deviceId, deviceToken } = parsed.data;
+
+    const limited = checkPushRateLimit(
+      request,
+      "test-device",
+      { limit: 5, windowMs: 5 * 60_000 },
+      deviceId
+    );
+    if (limited) return limited;
+
     await authenticatePushDevice(deviceId, deviceToken);
     const rows = await supabaseRest<DeviceRow[]>(
       `push_devices?id=eq.${encodeURIComponent(deviceId)}&enabled=eq.true&select=id,endpoint,p256dh,auth&limit=1`
