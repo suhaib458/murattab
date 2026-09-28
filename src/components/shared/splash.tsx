@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MOBILE_QUERY = "(max-width: 768px)";
 const MOBILE_SPLASH_FAILSAFE_MS = 10_000;
 
 export function Splash({ onDismiss }: { onDismiss: () => void }) {
   const dismissedRef = useRef(false);
+  const [clientReady, setClientReady] = useState(false);
 
   const finishSplash = useCallback(() => {
     if (dismissedRef.current) return;
@@ -16,6 +17,8 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
   }, [onDismiss]);
 
   useEffect(() => {
+    setClientReady(true);
+
     if (window.matchMedia(MOBILE_QUERY).matches) {
       // iOS Safari can occasionally leave a media element buffering/stalled
       // without firing either `ended` or `error`. Keep the normal video
@@ -33,7 +36,13 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
   };
 
   return (
-    <div className="splash splash-responsive" role="dialog" aria-modal="true" aria-label="شاشة بدء مرتب">
+    <div
+      className="splash splash-responsive"
+      role="dialog"
+      aria-modal="true"
+      aria-label="شاشة بدء مرتب"
+      data-client-ready={clientReady ? "true" : "false"}
+    >
       <div className="splash-mobile-video">
         <video
           autoPlay
