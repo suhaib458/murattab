@@ -47,6 +47,16 @@ test("شاشة البداية تنتهي تلقائيًا أو عند النقر
 test("الهاتف يخرج من شاشة البداية حتى إذا توقف الفيديو بدون ended أو error", async ({ page, isMobile }) => {
   test.skip(!isMobile, "هذا السيناريو خاص بفيديو شاشة البداية على الهاتف.");
 
+  page.on("console", (message) => {
+    console.log(`[mobile browser:${message.type()}] ${message.text()}`);
+  });
+  page.on("pageerror", (error) => {
+    console.log(`[mobile browser:pageerror] ${error.stack ?? error.message}`);
+  });
+  page.on("requestfailed", (request) => {
+    console.log(`[mobile browser:requestfailed] ${request.url()} :: ${request.failure()?.errorText ?? "unknown"}`);
+  });
+
   await page.goto("/");
   const splash = page.getByRole("dialog", { name: "شاشة بدء مرتب" });
   await expect(splash).toBeVisible({ timeout: 10000 });
