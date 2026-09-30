@@ -656,6 +656,58 @@ test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
     };
   };
 
+  test("زر الإشعارات يظهر في يسار الشريط ويفتح سجل الإشعارات", async ({ page, isMobile }) => {
+    if (isMobile) {
+      await page.route("**/*", async (route) => {
+        if (route.request().resourceType() !== "document") {
+          await route.continue();
+          return;
+        }
+
+        const response = await route.fetch();
+        const headers = response.headers();
+        const csp = headers["content-security-policy"];
+        if (csp) {
+          headers["content-security-policy"] = csp
+            .split(";")
+            .map((directive) => directive.trim())
+            .filter((directive) => directive !== "upgrade-insecure-requests")
+            .join("; ");
+        }
+        await route.fulfill({ response, headers });
+      });
+    }
+
+    await page.addInitScript((snapshot) => {
+      localStorage.setItem("murattab-fallback-v1", JSON.stringify(snapshot));
+      sessionStorage.setItem("murattab-splash", "1");
+    }, setupUser("light"));
+
+    await page.goto("/");
+    if (isMobile) {
+      await expect(page.getByRole("dialog", { name: "شاشة بدء مرتب" })).toBeHidden({ timeout: 12_000 });
+    } else {
+      await dismissSplashIfVisible(page);
+    }
+    const bell = page.getByRole("button", { name: "الإشعارات", exact: true });
+    const brand = page.getByRole("link", { name: "مرتب، الصفحة الرئيسية" });
+    await expect(bell).toBeVisible();
+    await expect(brand).toBeVisible();
+
+    const bellBox = await bell.boundingBox();
+    const brandBox = await brand.boundingBox();
+    expect(bellBox).not.toBeNull();
+    expect(brandBox).not.toBeNull();
+    expect(bellBox!.x).toBeLessThan(brandBox!.x);
+
+    await bell.click();
+    const inbox = page.getByRole("dialog", { name: "الإشعارات" });
+    await expect(inbox).toBeVisible();
+    await expect(inbox.getByText("لا توجد إشعارات بعد.")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(inbox).toBeHidden();
+  });
+
   test("A & F & G: Saved LIGHT with device preferring DARK never receives data-theme='dark' during navigation and preserves persistent shell", async ({ page, isMobile }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.addInitScript((snapshot) => {

@@ -17,6 +17,7 @@ export function Splash({ onDismiss }: { onDismiss: () => void }) {
   }, [onDismiss]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- This flag intentionally changes only after client hydration.
     setClientReady(true);
     try {
       sessionStorage.removeItem("murattab-splash-recovery-v1");

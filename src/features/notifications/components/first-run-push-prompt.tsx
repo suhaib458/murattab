@@ -32,6 +32,7 @@ export function FirstRunPushPrompt({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const needsIosInstall = isIosDevice() && !isStandaloneApp();
+  const canRequestPermission = !needsIosInstall && status !== "unsupported" && status !== "denied";
 
   useEffect(() => {
     void getPushStatus()
@@ -80,13 +81,13 @@ export function FirstRunPushPrompt({
         {error && <p role="alert" style={{ color: "var(--destructive)" }}>{error}</p>}
 
         <div className="actions">
-          {!needsIosInstall && status !== "unsupported" && status !== "unavailable" && status !== "denied" && (
+          {canRequestPermission && (
             <button type="button" className="button" onClick={() => void enable()} disabled={busy || status === "loading"}>
-              {busy ? "جارٍ التفعيل…" : "تفعيل الإشعارات"}
+              {busy ? "جارٍ التفعيل…" : status === "loading" ? "جارٍ التحقق…" : "تفعيل الإشعارات"}
             </button>
           )}
           <button type="button" className="button ghost" onClick={onClose} disabled={busy}>
-            {needsIosInstall ? "حسنًا" : "ليس الآن"}
+            {needsIosInstall ? "حسنًا" : "لاحقًا"}
           </button>
         </div>
       </div>

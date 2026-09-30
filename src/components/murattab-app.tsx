@@ -31,6 +31,7 @@ import { RestoreDialog } from "@/components/shared/restore-dialog";
 import { MurattabProvider, type MurattabContextValue } from "@/components/murattab-context";
 import { refreshPushRegistration, syncPushReminders } from "@/features/notifications/push-client";
 import { FirstRunPushPrompt } from "@/features/notifications/components/first-run-push-prompt";
+import { NotificationInboxButton } from "@/features/notifications/components/notification-inbox-button";
 
 const repo = new LocalScheduleRepository();
 
@@ -352,6 +353,9 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
             <span className="brand-mark" aria-hidden="true" />
             مرتب
           </Link>
+          <div className="topbar-actions">
+            <NotificationInboxButton />
+          </div>
           <nav className="nav" aria-label="التنقل الرئيسي">
             {navigation.map((item) => (
               <Link

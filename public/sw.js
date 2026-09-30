@@ -1,6 +1,68 @@
-const SHELL_CACHE = "murattab-shell-v6";
-const RUNTIME_CACHE = "murattab-runtime-v6";
+const SHELL_CACHE = "murattab-shell-v7";
+const RUNTIME_CACHE = "murattab-runtime-v7";
 const PRECACHE_OFFLINE = ["/offline", "/manifest.webmanifest"];
+const INBOX_DATABASE = "murattab-notification-inbox";
+const INBOX_STORE = "items";
+
+function createNotificationId() {
+  if (self.crypto && typeof self.crypto.randomUUID === "function") return self.crypto.randomUUID();
+  return `notification-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function openInboxDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(INBOX_DATABASE, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(INBOX_STORE)) {
+        request.result.createObjectStore(INBOX_STORE, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveInboxNotification(notification) {
+  const database = await openInboxDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(INBOX_STORE, "readwrite");
+    transaction.objectStore(INBOX_STORE).put(notification);
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function markInboxNotificationRead(id) {
+  if (!id) return;
+  const database = await openInboxDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(INBOX_STORE, "readwrite");
+    const store = transaction.objectStore(INBOX_STORE);
+    const request = store.get(id);
+    request.onsuccess = () => {
+      if (request.result) store.put({ ...request.result, read: true });
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function notifyOpenPages() {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  clients.forEach((client) => client.postMessage({ type: "murattab:push-received" }));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -125,18 +187,23 @@ self.addEventListener("push", (event) => {
   const body = typeof payload.body === "string" ? payload.body : "لديك تذكير جديد.";
   const url = typeof payload.url === "string" && payload.url.startsWith("/") ? payload.url : "/schedule";
   const tag = typeof payload.tag === "string" ? payload.tag : "murattab-reminder";
+  const id = createNotificationId();
+  const inboxItem = { id, title, body, url, tag, receivedAt: Date.now(), read: false };
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      dir: "rtl",
-      lang: "ar",
-      tag,
-      renotify: false,
-      data: { url }
-    })
+    Promise.all([
+      saveInboxNotification(inboxItem).catch(() => undefined),
+      self.registration.showNotification(title, {
+        body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        dir: "rtl",
+        lang: "ar",
+        tag,
+        renotify: false,
+        data: { url, id }
+      })
+    ]).then(() => notifyOpenPages())
   );
 });
 
@@ -155,8 +222,14 @@ self.addEventListener("notificationclick", (event) => {
     // Keep the safe same-origin fallback.
   }
 
+  const notificationId = event.notification.data && typeof event.notification.data.id === "string"
+    ? event.notification.data.id
+    : "";
+
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+    Promise.all([
+      markInboxNotificationRead(notificationId).catch(() => undefined),
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
         if ("focus" in client) {
           if ("navigate" in client) await client.navigate(targetUrl);
@@ -164,6 +237,7 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
       return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
-    })
+      })
+    ])
   );
 });

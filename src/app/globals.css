@@ -251,6 +251,116 @@ p { line-height: 1.65; }
   font-weight: 600;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.notification-inbox-wrap { position: relative; }
+
+.notification-inbox-trigger,
+.notification-inbox-close {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.notification-inbox-trigger {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+}
+
+.notification-inbox-trigger:hover,
+.notification-inbox-trigger[aria-expanded="true"] { background: var(--surface-muted); }
+
+.notification-inbox-trigger:focus-visible,
+.notification-inbox-close:focus-visible,
+.notification-inbox-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.notification-inbox-badge {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-end: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 4px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.notification-inbox {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + 10px);
+  z-index: 7;
+  width: min(360px, calc(100vw - 28px));
+  max-height: min(480px, calc(100dvh - 110px));
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.notification-inbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-inbox-head h2 { margin: 0; font-size: 1rem; }
+
+.notification-inbox-close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.notification-inbox-empty { margin: 0; padding: 24px 14px; color: var(--foreground-muted); text-align: center; }
+.notification-inbox-list { margin: 0; padding: 0; list-style: none; }
+.notification-inbox-list li + li { border-top: 1px solid var(--border); }
+
+.notification-inbox-item {
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.notification-inbox-item:hover { background: var(--surface-muted); }
+.notification-inbox-item strong,
+.notification-inbox-item span,
+.notification-inbox-item time { display: block; }
+.notification-inbox-item strong { margin-bottom: 3px; font-size: 0.92rem; }
+.notification-inbox-item span { color: var(--foreground-muted); font-size: 0.86rem; line-height: 1.5; }
+.notification-inbox-item time { margin-top: 5px; color: var(--foreground-muted); font-size: 0.76rem; }
+
 /* -------------------------------------------------------------------------
    6. Cards (default surface)
    ------------------------------------------------------------------------- */
