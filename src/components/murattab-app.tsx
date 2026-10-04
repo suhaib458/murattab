@@ -322,6 +322,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   }, [nearestBottomNavItem]);
 
   useEffect(() => {
+    if (showSplash) return;
     const nav = bottomNavRef.current;
     if (!nav) return;
     const updateThumb = () => {
@@ -334,7 +335,7 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [active, setBottomNavThumbForItem]);
+  }, [active, setBottomNavThumbForItem, showSplash]);
 
   const endBottomNavDrag = (event: PointerEvent<HTMLElement>, cancelled = false) => {
     const pointer = bottomNavPointerRef.current;
@@ -348,10 +349,13 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
     const item = nearestBottomNavItem(event.clientX);
     if (!item) return;
     if (!cancelled && pointer.moved) {
+      // Snap to the item under the finger before routing. This avoids keeping a
+      // transient drag position if the route transition takes a moment.
+      setBottomNavThumbForItem(item);
       suppressBottomNavClickRef.current = true;
       window.setTimeout(() => {
         suppressBottomNavClickRef.current = false;
-      }, 0);
+      }, 100);
       router.push(item.dataset.bottomNavItem ?? "/");
     } else {
       setBottomNavThumbForItem(item);
@@ -486,8 +490,18 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
         }}
         onPointerUp={(event) => endBottomNavDrag(event)}
         onPointerCancel={(event) => endBottomNavDrag(event, true)}
+        onClickCapture={(event) => {
+          // A drag ends with a browser click on the link where it started.
+          // Stop that delayed click so only the destination under the finger wins.
+          if (!suppressBottomNavClickRef.current) return;
+          suppressBottomNavClickRef.current = false;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       >
-        <span className="bottom-nav-glass-thumb" style={bottomNavThumbStyle} aria-hidden="true" />
+        {bottomNavThumb && (
+          <span className="bottom-nav-glass-thumb" style={bottomNavThumbStyle} aria-hidden="true" />
+        )}
         {navigation.map((item) => (
           <Link
             key={item.href}
@@ -495,12 +509,6 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
             aria-current={active === item.href ? "page" : undefined}
             data-tour={`${item.tourKey}-nav`}
             data-bottom-nav-item={item.href}
-            onClick={(event) => {
-              if (suppressBottomNavClickRef.current) {
-                suppressBottomNavClickRef.current = false;
-                event.preventDefault();
-              }
-            }}
           >
             <NavIcon name={item.icon} />
             <span>{item.label}</span>
