@@ -120,7 +120,7 @@ export function SettingsView({
                 : "فاتح، داكن، أو تلقائي — حسب إعداد جهازك."}
             </p>
           </div>
-          <div className="segmented" role="group" aria-label="اختر وضع المظهر">
+          <div className="segmented theme-segmented" role="group" aria-label="اختر وضع المظهر">
             <button
               type="button"
               aria-pressed={data.settings.theme === "light"}
@@ -341,18 +341,6 @@ export function SettingsView({
 
       <div className="settings-group" aria-label="حول التطبيق">
         <h3>حول التطبيق</h3>
-        <div className="settings-row" role="group" aria-label="الخصوصية والإصدار">
-          <span className="row-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z" />
-            </svg>
-          </span>
-          <div className="row-body">
-            <h2>الخصوصية والإصدار</h2>
-            <p>مرتب 0.1.0 · يبقى ملفك وجدولك محليين. عند تفعيل إشعارات الجهاز تُرسل تفاصيل التذكيرات الضرورية فقط وبلا اسم أو رقم جامعي.</p>
-          </div>
-        </div>
-
         <div className="about-social-section">
           <div className="about-social-header">
             <h4 className="about-social-title">صُنع بجهد وحب لطلاب الجامعة</h4>

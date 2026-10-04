@@ -75,6 +75,24 @@ export async function markInboxNotificationsRead(): Promise<void> {
   });
 }
 
+export async function clearInboxNotifications(): Promise<void> {
+  if (!canUseIndexedDb()) return;
+
+  const database = await openInboxDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).clear();
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+}
+
 export function isSafeNotificationPath(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//");
 }

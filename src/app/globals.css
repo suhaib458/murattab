@@ -330,6 +330,8 @@ p { line-height: 1.65; }
 
 .notification-inbox-head h2 { margin: 0; font-size: 1rem; }
 
+.notification-inbox-actions { display: flex; align-items: center; gap: 4px; }
+
 .notification-inbox-close {
   width: 32px;
   height: 32px;
@@ -337,6 +339,29 @@ p { line-height: 1.65; }
   font-size: 1.4rem;
   line-height: 1;
 }
+
+.notification-inbox-clear {
+  min-height: 36px;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--destructive);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-inbox-clear:hover { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.notification-inbox-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.notification-inbox-confirm { padding: 18px 14px; }
+.notification-inbox-confirm h3 { margin: 0; font-size: 0.96rem; }
+.notification-inbox-confirm p { margin: 7px 0 14px; color: var(--foreground-muted); font-size: 0.88rem; line-height: 1.55; }
+.notification-inbox-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.notification-inbox-confirm-actions .button { min-height: 40px; }
+.notification-inbox-status { margin: 14px 14px -8px; color: var(--success); font-size: 0.86rem; font-weight: 600; }
 
 .notification-inbox-empty { margin: 0; padding: 24px 14px; color: var(--foreground-muted); text-align: center; }
 .notification-inbox-list { margin: 0; padding: 0; list-style: none; }
@@ -1250,15 +1275,23 @@ p { line-height: 1.65; }
   color: var(--foreground-muted); font-size: 0.82rem;
 }
 
-/* Segmented appearance control */
+/* Segmented appearance control — soft depth with a glass active state. */
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 6px;
-  background: var(--surface-muted);
+  gap: 8px;
+  padding: 8px;
+  isolation: isolate;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 84%, transparent), color-mix(in srgb, var(--surface-muted) 90%, transparent));
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border-soft);
+  box-shadow:
+    inset 2px 2px 5px color-mix(in srgb, var(--foreground) 6%, transparent),
+    inset -2px -2px 5px color-mix(in srgb, var(--surface) 78%, transparent),
+    0 10px 22px color-mix(in srgb, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
 }
 .segmented button {
   min-height: 44px;
@@ -1266,22 +1299,49 @@ p { line-height: 1.65; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 0;
-  background: transparent;
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--surface-muted) 28%, transparent);
   color: var(--foreground-muted);
   border-radius: var(--radius-pill);
   font-size: 0.92rem;
   font-weight: 600;
   padding: 0 12px;
-  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 .segmented button svg { width: 16px; height: 16px; }
-.segmented button:hover { color: var(--foreground); }
+.segmented button:hover { color: var(--foreground); background: color-mix(in srgb, var(--surface) 72%, transparent); }
+.segmented button:active { transform: translateY(1px); }
+.segmented button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .segmented button[aria-pressed="true"] {
-  background: var(--surface);
-  color: var(--primary);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--primary);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--surface-muted) 56%, transparent));
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
+  box-shadow:
+    inset 1px 1px 1px color-mix(in srgb, var(--surface) 92%, transparent),
+    inset -2px -2px 5px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 5px 14px color-mix(in srgb, var(--foreground) 13%, transparent),
+    0 0 22px color-mix(in srgb, var(--warning) 24%, transparent);
+}
+.segmented button[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 2px;
+  border-radius: inherit;
+  background: radial-gradient(circle at 72% 18%, color-mix(in srgb, var(--surface) 84%, transparent), transparent 42%);
+  pointer-events: none;
+}
+[data-theme="dark"] .segmented {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-muted) 86%, transparent), color-mix(in srgb, var(--background) 92%, transparent));
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.35), inset -1px -1px 4px rgba(255, 255, 255, 0.04), 0 12px 26px rgba(0, 0, 0, 0.32);
+}
+[data-theme="dark"] .segmented button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--warning) 58%, var(--border));
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.08), inset -2px -2px 5px rgba(0, 0, 0, 0.28), 0 5px 16px rgba(0, 0, 0, 0.34), 0 0 22px color-mix(in srgb, var(--warning) 22%, transparent);
 }
 
 /* Native-style settings row */

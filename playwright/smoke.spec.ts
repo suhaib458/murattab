@@ -689,7 +689,7 @@ test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
     } else {
       await dismissSplashIfVisible(page);
     }
-    const bell = page.getByRole("button", { name: "الإشعارات", exact: true });
+    const bell = page.getByRole("button", { name: /^الإشعارات/ });
     const brand = page.getByRole("link", { name: "مرتب، الصفحة الرئيسية" });
     await expect(bell).toBeVisible();
     await expect(brand).toBeVisible();
@@ -706,6 +706,40 @@ test.describe("Phase 4.2.2: Route & Theme Flash Elimination", () => {
     await expect(inbox.getByText("لا توجد إشعارات بعد.")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(inbox).toBeHidden();
+
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("murattab-notification-inbox", 1);
+        request.onupgradeneeded = () => {
+          if (!request.result.objectStoreNames.contains("items")) {
+            request.result.createObjectStore("items", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction("items", "readwrite");
+          const store = transaction.objectStore("items");
+          store.put({ id: "test-notification-1", title: "إشعار تجريبي", body: "تفاصيل الإشعار الأول", url: "/schedule", tag: "test", receivedAt: 1, read: false });
+          store.put({ id: "test-notification-2", title: "إشعار تجريبي ثانٍ", body: "تفاصيل الإشعار الثاني", url: "/calendar", tag: "test", receivedAt: 2, read: false });
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onerror = () => reject(transaction.error);
+        };
+        request.onerror = () => reject(request.error);
+      });
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await expect(page.getByRole("button", { name: "الإشعارات، 2 غير مقروءة" })).toBeVisible();
+    await bell.click();
+    await expect(inbox.getByRole("button", { name: "مسح الكل" })).toBeVisible();
+    await inbox.getByRole("button", { name: "مسح الكل" }).click();
+    await expect(inbox.getByRole("alertdialog", { name: "مسح جميع الإشعارات؟" })).toBeVisible();
+    await inbox.getByRole("button", { name: "نعم، امسح الكل" }).click();
+    await expect(inbox.getByRole("status")).toHaveText("تم مسح جميع الإشعارات.");
+    await expect(inbox.getByText("لا توجد إشعارات بعد.")).toBeVisible();
   });
 
   test("A & F & G: Saved LIGHT with device preferring DARK never receives data-theme='dark' during navigation and preserves persistent shell", async ({ page, isMobile }) => {
