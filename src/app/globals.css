@@ -1275,13 +1275,16 @@ p { line-height: 1.65; }
   color: var(--foreground-muted); font-size: 0.82rem;
 }
 
-/* Segmented appearance control — soft depth with a glass active state. */
-.segmented {
+/* Segmented appearance control — a tactile glass thumb follows touch movement. */
+.glass-swipe-selector {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 8px;
+  position: relative;
   isolation: isolate;
+  overflow: hidden;
+  touch-action: pan-y;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 84%, transparent), color-mix(in srgb, var(--surface-muted) 90%, transparent));
   border-radius: var(--radius-pill);
@@ -1293,54 +1296,80 @@ p { line-height: 1.65; }
   backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
 }
-.segmented button {
+.glass-swipe-thumb {
+  position: absolute;
+  z-index: 0;
+  top: 8px;
+  bottom: 8px;
+  left: var(--glass-swipe-thumb-left, 8px);
+  width: var(--glass-swipe-thumb-width, calc((100% - 32px) / 3));
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--surface) 78%, var(--glass-border));
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 86%, transparent), color-mix(in srgb, var(--surface-muted) 52%, transparent));
+  box-shadow:
+    inset 1px 1px 1px color-mix(in srgb, var(--surface) 92%, transparent),
+    inset -2px -2px 5px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 5px 14px color-mix(in srgb, var(--foreground) 13%, transparent),
+    0 0 22px color-mix(in srgb, var(--warning) 24%, transparent);
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(165%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(165%);
+  transition: left 240ms var(--motion-ease), width 240ms var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+  will-change: left, width;
+}
+.glass-swipe-thumb::before {
+  content: "";
+  position: absolute;
+  inset: 1px 12% 48%;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent, color-mix(in srgb, var(--surface) 82%, transparent), transparent);
+  opacity: 0.8;
+}
+.glass-swipe-thumb::after {
+  content: "";
+  position: absolute;
+  width: 44%;
+  height: 130%;
+  top: -60%;
+  right: 12%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
+  filter: blur(10px);
+  opacity: 0.7;
+}
+.glass-swipe-selector.is-dragging .glass-swipe-thumb { transition: none; }
+.glass-swipe-selector button {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   position: relative;
-  z-index: 0;
+  z-index: 1;
   overflow: hidden;
   border: 1px solid transparent;
-  background: color-mix(in srgb, var(--surface-muted) 28%, transparent);
+  background: transparent;
   color: var(--foreground-muted);
   border-radius: var(--radius-pill);
   font-size: 0.92rem;
   font-weight: 600;
   padding: 0 12px;
-  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+  transition: color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
-.segmented button svg { width: 16px; height: 16px; }
-.segmented button:hover { color: var(--foreground); background: color-mix(in srgb, var(--surface) 72%, transparent); }
-.segmented button:active { transform: translateY(1px); }
-.segmented button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.segmented button[aria-pressed="true"] {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--surface-muted) 56%, transparent));
+.glass-swipe-selector button svg { width: 16px; height: 16px; }
+.glass-swipe-selector button:hover { color: var(--foreground); }
+.glass-swipe-selector button:active { transform: translateY(1px); }
+.glass-swipe-selector button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.glass-swipe-selector button[aria-pressed="true"] {
   color: var(--foreground);
-  border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
-  box-shadow:
-    inset 1px 1px 1px color-mix(in srgb, var(--surface) 92%, transparent),
-    inset -2px -2px 5px color-mix(in srgb, var(--foreground) 6%, transparent),
-    0 5px 14px color-mix(in srgb, var(--foreground) 13%, transparent),
-    0 0 22px color-mix(in srgb, var(--warning) 24%, transparent);
 }
-.segmented button[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 2px;
-  border-radius: inherit;
-  background: radial-gradient(circle at 72% 18%, color-mix(in srgb, var(--surface) 84%, transparent), transparent 42%);
-  pointer-events: none;
-}
-[data-theme="dark"] .segmented {
+[data-theme="dark"] .glass-swipe-selector {
   background: linear-gradient(145deg, color-mix(in srgb, var(--surface-muted) 86%, transparent), color-mix(in srgb, var(--background) 92%, transparent));
   box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.35), inset -1px -1px 4px rgba(255, 255, 255, 0.04), 0 12px 26px rgba(0, 0, 0, 0.32);
 }
-[data-theme="dark"] .segmented button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--warning) 58%, var(--border));
+[data-theme="dark"] .glass-swipe-thumb {
   box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.08), inset -2px -2px 5px rgba(0, 0, 0, 0.28), 0 5px 16px rgba(0, 0, 0, 0.34), 0 0 22px color-mix(in srgb, var(--warning) 22%, transparent);
 }
 
@@ -1683,6 +1712,9 @@ p { line-height: 1.65; }
   height: var(--bottom-nav-height);
   justify-content: space-around;
   gap: 2px;
+  isolation: isolate;
+  overflow: hidden;
+  touch-action: pan-y;
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
@@ -1693,11 +1725,44 @@ p { line-height: 1.65; }
 }
 [data-theme="dark"] .bottom-nav { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
 
+.bottom-nav-glass-thumb {
+  position: absolute;
+  z-index: 0;
+  top: 6px;
+  bottom: 6px;
+  left: var(--bottom-nav-thumb-left, 6px);
+  width: var(--bottom-nav-thumb-width, calc((100% - 18px) / 4));
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--surface) 80%, var(--glass-border));
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--surface) 88%, transparent), color-mix(in srgb, var(--surface-muted) 45%, transparent));
+  box-shadow:
+    inset 1px 1px 1px color-mix(in srgb, var(--surface) 94%, transparent),
+    inset -2px -2px 5px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 4px 13px color-mix(in srgb, var(--foreground) 12%, transparent),
+    0 0 18px color-mix(in srgb, var(--warning) 20%, transparent);
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(170%);
+  transition: left 240ms var(--motion-ease), width 240ms var(--motion-ease);
+  will-change: left, width;
+}
+.bottom-nav-glass-thumb::before {
+  content: "";
+  position: absolute;
+  inset: 1px 14% 52%;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent, color-mix(in srgb, var(--surface) 84%, transparent), transparent);
+}
+.bottom-nav.is-dragging .bottom-nav-glass-thumb { transition: none; }
+
 .bottom-nav a {
   flex: 1;
   padding: 8px 6px;
   min-height: 44px;
   display: flex;
+  position: relative;
+  z-index: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1706,7 +1771,7 @@ p { line-height: 1.65; }
   color: var(--foreground-muted);
   border-radius: var(--radius-pill);
   font-weight: 500;
-  transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+  transition: color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
   -webkit-tap-highlight-color: transparent;
 }
 .bottom-nav a:hover { color: var(--foreground); }
@@ -1716,7 +1781,6 @@ p { line-height: 1.65; }
 }
 .bottom-nav a[aria-current="page"] {
   color: var(--primary);
-  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
   font-weight: 700;
 }
 .bottom-nav a svg { width: 18px; height: 18px; stroke-width: 1.8; }

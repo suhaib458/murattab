@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { isLegacyAcademicSelection } from "@/config/ttu";
 import type { AppSettings, Course } from "@/domain/models";
 import type { AppSnapshot } from "@/repositories/schedule-repository";
@@ -42,6 +42,8 @@ const navigation = [
   { href: "/settings", label: "الإعدادات", icon: "settings" as const, tourKey: "settings" }
 ];
 
+const BOTTOM_NAV_DRAG_THRESHOLD = 8;
+
 export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const router = useRouter();
   const pathname = usePathname();
@@ -55,6 +57,11 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
   const [courseToEdit, setCourseToEdit] = useState<Course | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showFirstRunPushPrompt, setShowFirstRunPushPrompt] = useState(false);
+  const [bottomNavThumb, setBottomNavThumb] = useState<{ left: number; width: number } | null>(null);
+  const [bottomNavDragging, setBottomNavDragging] = useState(false);
+  const bottomNavRef = useRef<HTMLElement>(null);
+  const bottomNavPointerRef = useRef<{ id: number; startX: number; moved: boolean } | null>(null);
+  const suppressBottomNavClickRef = useRef(false);
   // The splash is a visual intro only. Local storage loading runs in parallel,
   // but it must never be allowed to keep the user trapped on the video after
   // the intro has ended or its safety timeout has fired.
@@ -276,6 +283,88 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
 
   const active = navigation.find((item) => item.href === pathname)?.href ?? "/";
 
+  const getBottomNavItems = useCallback(() => {
+    return Array.from(bottomNavRef.current?.querySelectorAll<HTMLAnchorElement>("[data-bottom-nav-item]") ?? []);
+  }, []);
+
+  const setBottomNavThumbForItem = useCallback((item: HTMLAnchorElement | null) => {
+    const nav = bottomNavRef.current;
+    if (!nav || !item) return;
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    setBottomNavThumb({ left: itemRect.left - navRect.left, width: itemRect.width });
+  }, []);
+
+  const nearestBottomNavItem = useCallback((clientX: number) => {
+    return getBottomNavItems().reduce<HTMLAnchorElement | null>((nearest, item) => {
+      if (!nearest) return item;
+      const itemRect = item.getBoundingClientRect();
+      const nearestRect = nearest.getBoundingClientRect();
+      const distance = Math.abs(itemRect.left + itemRect.width / 2 - clientX);
+      const nearestDistance = Math.abs(nearestRect.left + nearestRect.width / 2 - clientX);
+      return distance < nearestDistance ? item : nearest;
+    }, null);
+  }, [getBottomNavItems]);
+
+  const moveBottomNavThumbWithPointer = useCallback((clientX: number) => {
+    const nav = bottomNavRef.current;
+    const item = nearestBottomNavItem(clientX);
+    if (!nav || !item) return null;
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const width = itemRect.width;
+    const left = Math.min(
+      Math.max(clientX - navRect.left - width / 2, 0),
+      Math.max(navRect.width - width, 0)
+    );
+    setBottomNavThumb({ left, width });
+    return item;
+  }, [nearestBottomNavItem]);
+
+  useEffect(() => {
+    const nav = bottomNavRef.current;
+    if (!nav) return;
+    const updateThumb = () => {
+      setBottomNavThumbForItem(nav.querySelector<HTMLAnchorElement>(`[data-bottom-nav-item="${active}"]`));
+    };
+    const frame = window.requestAnimationFrame(updateThumb);
+    const observer = new ResizeObserver(updateThumb);
+    observer.observe(nav);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [active, setBottomNavThumbForItem]);
+
+  const endBottomNavDrag = (event: PointerEvent<HTMLElement>, cancelled = false) => {
+    const pointer = bottomNavPointerRef.current;
+    if (!pointer || pointer.id !== event.pointerId) return;
+    bottomNavPointerRef.current = null;
+    setBottomNavDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const item = nearestBottomNavItem(event.clientX);
+    if (!item) return;
+    if (!cancelled && pointer.moved) {
+      suppressBottomNavClickRef.current = true;
+      window.setTimeout(() => {
+        suppressBottomNavClickRef.current = false;
+      }, 0);
+      router.push(item.dataset.bottomNavItem ?? "/");
+    } else {
+      setBottomNavThumbForItem(item);
+    }
+  };
+
+  const bottomNavThumbStyle = bottomNavThumb
+    ? ({
+        "--bottom-nav-thumb-left": `${bottomNavThumb.left}px`,
+        "--bottom-nav-thumb-width": `${bottomNavThumb.width}px`
+      } as CSSProperties)
+    : undefined;
+
   if (pathname === "/offline") {
     return <>{children}</>;
   }
@@ -378,13 +467,40 @@ export function MurattabApp({ children }: { children?: React.ReactNode } = {}) {
         )}
       </main>
 
-      <nav className="bottom-nav" aria-label="التنقل الرئيسي للهاتف">
+      <nav
+        ref={bottomNavRef}
+        className={`bottom-nav${bottomNavDragging ? " is-dragging" : ""}`}
+        aria-label="التنقل الرئيسي للهاتف"
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse") return;
+          bottomNavPointerRef.current = { id: event.pointerId, startX: event.clientX, moved: false };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setBottomNavDragging(true);
+          moveBottomNavThumbWithPointer(event.clientX);
+        }}
+        onPointerMove={(event) => {
+          const pointer = bottomNavPointerRef.current;
+          if (!pointer || pointer.id !== event.pointerId) return;
+          if (Math.abs(event.clientX - pointer.startX) >= BOTTOM_NAV_DRAG_THRESHOLD) pointer.moved = true;
+          moveBottomNavThumbWithPointer(event.clientX);
+        }}
+        onPointerUp={(event) => endBottomNavDrag(event)}
+        onPointerCancel={(event) => endBottomNavDrag(event, true)}
+      >
+        <span className="bottom-nav-glass-thumb" style={bottomNavThumbStyle} aria-hidden="true" />
         {navigation.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             aria-current={active === item.href ? "page" : undefined}
             data-tour={`${item.tourKey}-nav`}
+            data-bottom-nav-item={item.href}
+            onClick={(event) => {
+              if (suppressBottomNavClickRef.current) {
+                suppressBottomNavClickRef.current = false;
+                event.preventDefault();
+              }
+            }}
           >
             <NavIcon name={item.icon} />
             <span>{item.label}</span>

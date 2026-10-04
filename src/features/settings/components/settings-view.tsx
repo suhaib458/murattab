@@ -10,6 +10,7 @@ import { LocalScheduleRepository } from "@/storage/local-repository";
 import { PushNotificationSettings } from "@/features/notifications/components/push-notification-settings";
 import { BroadcastNotificationSettings } from "@/features/notifications/components/broadcast-notification-settings";
 import { disablePushNotifications } from "@/features/notifications/push-client";
+import { GlassSwipeSelector } from "@/components/shared/glass-swipe-selector";
 
 const repo = new LocalScheduleRepository();
 
@@ -120,42 +121,44 @@ export function SettingsView({
                 : "فاتح، داكن، أو تلقائي — حسب إعداد جهازك."}
             </p>
           </div>
-          <div className="segmented theme-segmented" role="group" aria-label="اختر وضع المظهر">
-            <button
-              type="button"
-              aria-pressed={data.settings.theme === "light"}
-              onClick={() => setTheme("light")}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-              </svg>
-              فاتح
-            </button>
-            <button
-              type="button"
-              aria-pressed={data.settings.theme === "dark"}
-              onClick={() => setTheme("dark")}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-              </svg>
-              داكن
-            </button>
-            <button
-              type="button"
-              aria-pressed={data.settings.theme === "system"}
-              aria-label="تلقائي — حسب إعداد جهازك"
-              title="تلقائي — حسب إعداد جهازك"
-              onClick={() => setTheme("system")}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="13" rx="2" />
-                <path d="M8 21h8M12 17v4" />
-              </svg>
-              تلقائي
-            </button>
-          </div>
+          <GlassSwipeSelector
+            className="theme-segmented"
+            value={data.settings.theme}
+            onChange={setTheme}
+            ariaLabel="اختر وضع المظهر"
+            options={[
+              {
+                value: "light",
+                label: "فاتح",
+                icon: (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                  </svg>
+                )
+              },
+              {
+                value: "dark",
+                label: "داكن",
+                icon: (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+                  </svg>
+                )
+              },
+              {
+                value: "system",
+                label: "تلقائي",
+                accessibleLabel: "تلقائي — حسب إعداد جهازك",
+                icon: (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="13" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
+                )
+              }
+            ]}
+          />
         </div>
       </div>
 
