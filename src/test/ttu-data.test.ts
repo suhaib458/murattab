@@ -234,9 +234,9 @@ describe("Phase 3C — legacy term migration", () => {
     expect(out.activeTermId).toBe(PRODUCTION_TERM_ID);
   });
 
-  it("migrates the superseded production term after the official teaching delay", () => {
+  it("migrates the superseded onboarding term after the official teaching delay without breaking course links", () => {
     const superseded: AcademicTerm = {
-      id: PRODUCTION_TERM_ID,
+      id: "onboarding-created-term-id",
       name: "الفصل الدراسي الأول 2026/2027",
       startsOn: "2026-10-04",
       endsOn: "2027-01-07",
@@ -244,9 +244,10 @@ describe("Phase 3C — legacy term migration", () => {
     };
     const out = migrateLegacyTerms([superseded], superseded.id);
     expect(out.migrated).toBe(true);
-    expect(out.terms[0]).toEqual(PRODUCTION_TERM);
+    expect(out.terms[0].id).toBe(superseded.id);
     expect(out.terms[0].startsOn).toBe("2026-10-11");
-    expect(out.activeTermId).toBe(PRODUCTION_TERM_ID);
+    expect(out.terms[0].endsOn).toBe(superseded.endsOn);
+    expect(out.activeTermId).toBe(superseded.id);
   });
 
   it("does NOT migrate user-created terms (only the exact placeholder signature)", () => {

@@ -8,8 +8,9 @@ export const initialSettings: AppSettings = { id: "settings", theme: "light", on
  * Production AcademicTerm for the verified TTU 2026/2027 first semester.
  * Used as the migration target for legacy placeholder terms.
  *
- * ID is a fixed UUID literal so the same production term is referenced
- * consistently across reload / build / backup / restore.
+ * The fixed ID is used for migrations from the original placeholder. Terms
+ * created by earlier onboarding builds keep their own IDs when corrected so
+ * their existing courses and sessions remain linked.
  */
 export const PRODUCTION_TERM_ID = "4649c262-4d89-4dec-ae0b-ad8f3426d0ed";
 
@@ -29,8 +30,9 @@ export const PRODUCTION_TERM: AcademicTerm = AcademicTermSchema.parse({
  *   2. The previously-published TTU production term whose teaching start was
  *      2026-10-04 before the official delay to 2026-10-11.
  *
- * User-created terms are never rewritten unless they exactly match one of
- * those known stale signatures.
+ * The previously-published onboarding term used a generated ID, so the
+ * superseded signature deliberately matches its official name and dates—not
+ * a particular ID. Its ID is preserved during migration.
  */
 export function migrateLegacyTerms(
   terms: AcademicTerm[],
@@ -45,16 +47,21 @@ export function migrateLegacyTerms(
       t.isCurrent;
 
     const isSupersededProductionTerm =
-      t.id === PRODUCTION_TERM_ID &&
       t.name === "الفصل الدراسي الأول 2026/2027" &&
       t.startsOn === "2026-10-04" &&
       t.endsOn === "2027-01-07" &&
       t.isCurrent;
 
-    if (isFoundationPlaceholder || isSupersededProductionTerm) {
+    if (isFoundationPlaceholder) {
       migrated = true;
       return PRODUCTION_TERM;
     }
+
+    if (isSupersededProductionTerm) {
+      migrated = true;
+      return { ...t, startsOn: PRODUCTION_TERM.startsOn };
+    }
+
     return t;
   });
   // If the active term was the legacy one and we replaced it, point active at the production term.

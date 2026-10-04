@@ -68,11 +68,11 @@ export function Onboarding({
             createdAt: new Date().toISOString()
           };
           // Production AcademicTerm: first semester 2026/2027.
-          // teaching start = 2026-10-04, last teaching day = 2027-01-07 (verified)
+          // Teaching starts on 2026-10-11; no classes occur before this date.
           const term = {
             id: generateId(),
             name: "الفصل الدراسي الأول 2026/2027",
-            startsOn: "2026-10-04",
+            startsOn: "2026-10-11",
             endsOn: "2027-01-07",
             isCurrent: true
           };
