@@ -62,7 +62,7 @@ async function seedOnboardedProfile(
           id: termId,
           name: "الفصل الدراسي الأول 2026/2027",
           startsOn: "2026-10-04",
-          endsOn: "2027-01-07",
+          endsOn: "2027-01-14",
           isCurrent: true
         }
       ],
@@ -187,7 +187,7 @@ test.describe("Phase 3.5C", () => {
           createdAt: new Date().toISOString()
         },
         settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: "t1", schemaVersion: 1 },
-        terms: [{ id: "t1", name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+        terms: [{ id: "t1", name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-14", isCurrent: true }],
         courses: [
           { id: "c1", termId: "t1", name: "هندسة البرمجيات", reminder: { enabled: true, minutesBefore: 10 }, createdAt: new Date().toISOString() }
         ],
@@ -221,7 +221,7 @@ test.describe("Phase 3.5C", () => {
           createdAt: new Date().toISOString()
         },
         settings: { id: "settings", theme: "system", onboardingComplete: true, splashShown: true, activeTermId: "t1", schemaVersion: 1 },
-        terms: [{ id: "t1", name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-07", isCurrent: true }],
+        terms: [{ id: "t1", name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-04", endsOn: "2027-01-14", isCurrent: true }],
         courses: [
           { id: "c1", termId: "t1", name: "هندسة البرمجيات", reminder: { enabled: true, minutesBefore: 10 }, createdAt: new Date().toISOString() }
         ],

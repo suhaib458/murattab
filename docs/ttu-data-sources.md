@@ -1,7 +1,7 @@
 # TTU Data Sources — Phase 3C Provenance
 
-**Verification date:** 2026-09-17
-**Verifier:** Product Owner (manual review of official TTU pages)
+**Verification date:** 2026-11-05
+**Verifier:** Product Owner (live review of official TTU pages)
 **Status legend:**
 
 - `VERIFIED_OFFICIAL` — explicitly confirmed against the cited official TTU URL
@@ -85,40 +85,37 @@ The single source of truth for this formatting rule is `getIctLabLabel()` in `sr
 
 ## 5. Academic Calendar 2026/2027 (First Semester)
 
-Primary source: https://www.ttu.edu.jo/e-calendar/ (Product Owner manually verified the official table on 2026-09-17).
+Primary source: https://www.ttu.edu.jo/e-calendar/ (live official table reviewed on 2026-11-05).
+
+The page does not publish a "last updated" timestamp. The dates below are a
+transcription of the live official table as it appeared on the review date; no
+unpublished dates were inferred.
 
 | Field | Value | Status |
 |---|---|---|
 | Academic year | 2026/2027 | VERIFIED_OFFICIAL |
 | Term | First (الفصل الدراسي الأول) | VERIFIED_OFFICIAL |
-| Academic year start / faculty work start | 2026-10-04 | VERIFIED_OFFICIAL |
-| Add/drop period | 2026-10-04 → 2026-10-08 | VERIFIED_OFFICIAL |
+| Academic year start, add/drop start, and faculty work start | 2026-10-04 | VERIFIED_OFFICIAL |
 | Makeup / incomplete exams | 2026-10-04 → 2026-10-08 | VERIFIED_OFFICIAL |
 | Teaching start | 2026-10-11 | VERIFIED_OFFICIAL |
-| Last day to equate courses | 2026-10-29 | VERIFIED_OFFICIAL |
-| Midterm exam window | 2026-11-22 → 2026-12-03 | VERIFIED_OFFICIAL |
-| Last teaching day | 2027-01-07 | VERIFIED_OFFICIAL |
-| Final practical / computer-based exams | 2027-01-10 → 2027-01-14 | VERIFIED_OFFICIAL |
-| Final theoretical exams | 2027-01-17 → 2027-01-26 | VERIFIED_OFFICIAL |
-| Last day to drop a course | 2027-01-07 | VERIFIED_OFFICIAL |
+| Last day to submit incomplete results | 2026-10-11 | VERIFIED_OFFICIAL |
+| Last day to equate courses | 2026-11-05 | VERIFIED_OFFICIAL |
+| Comprehensive master's exam window | 2026-11-08 → 2026-11-12 | VERIFIED_OFFICIAL |
+| Midterm exam window | 2026-11-29 → 2026-12-10 | VERIFIED_OFFICIAL |
+| Last day to discuss master's theses / second-semester registration begins | 2027-01-10 | VERIFIED_OFFICIAL |
+| Last teaching day / last day to drop / deprivation deadline | 2027-01-14 | VERIFIED_OFFICIAL |
+| Final practical / computer-based exams | 2027-01-17 → 2027-01-21 | VERIFIED_OFFICIAL |
+| Final theoretical exams | 2027-01-24 → 2027-02-02 | VERIFIED_OFFICIAL |
+| Last day to submit final results | 2027-02-04 | VERIFIED_OFFICIAL |
+| Estimated beginning of Ramadan | 2027-02-07 | VERIFIED_OFFICIAL |
+| Cumulative-GPA appeal deadline | 2027-02-11 | VERIFIED_OFFICIAL |
+| Transfer applications | 2027-02-14 → 2027-02-18 | VERIFIED_OFFICIAL |
+| Degree decision | 2027-02-17 | VERIFIED_OFFICIAL |
 
-Revision note (2026-09-24): an official TTU Admission & Registration notice
-postponed the academic-year / faculty-work start to 2026-10-04 and the first
-teaching day to 2026-10-11. It also set both the add/drop period and the
-makeup/incomplete exam window to 2026-10-04 → 2026-10-08. These revised dates
-supersede the older e-calendar values above for the affected milestones.
-
-A separate College of Information Technology and Communications notice schedules
-specific accepted-excuse summer 2025/2026 exams on 2026-09-29 and incomplete
-graduation-project discussions on 2026-09-30. Those are faculty- and
-student-specific operational notices, so they are documented but are not
-surfaced as university-wide calendar events.
-
-The V1 student-facing calendar shows the 17 student-relevant events listed in
-`data/academic-calendars/ttu/2026-2027/first/calendar.json` (registration, exams,
-holidays, teaching milestones). Administrative events (e.g. grade-submission
-deadlines, faculty senate meetings, faculty sabbaticals) are present in the
-official table but are intentionally NOT surfaced in the student UI.
+The current bundled calendar transcribes all 24 rows in the live official table,
+including academic administration milestones. This keeps the app's calendar and
+its optional academic reminders aligned with the source rather than silently
+filtering published events.
 
 ### Production term
 
@@ -126,7 +123,7 @@ official table but are intentionally NOT surfaced in the student UI.
 |---|---|
 | `name` | الفصل الدراسي الأول 2026/2027 |
 | `startsOn` | 2026-10-11 (revised teaching start, used for ICS first-occurrence math) |
-| `endsOn` | 2027-01-07 (last teaching day) |
+| `endsOn` | 2027-01-14 (last teaching day) |
 | `isCurrent` | true |
 
 ### V0 placeholder dates

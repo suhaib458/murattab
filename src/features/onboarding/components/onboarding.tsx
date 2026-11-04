@@ -73,7 +73,7 @@ export function Onboarding({
             id: generateId(),
             name: "الفصل الدراسي الأول 2026/2027",
             startsOn: "2026-10-11",
-            endsOn: "2027-01-07",
+            endsOn: "2027-01-14",
             isCurrent: true
           };
           await onComplete(

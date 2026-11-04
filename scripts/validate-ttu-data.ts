@@ -133,8 +133,8 @@ else {
 // 5. Production term
 const productionTerm = {
   name: "الفصل الدراسي الأول 2026/2027",
-  startsOn: "2026-10-04",
-  endsOn: "2027-01-07"
+  startsOn: "2026-10-11",
+  endsOn: "2027-01-14"
 };
 if (productionTerm.startsOn === "2026-09-01" || productionTerm.endsOn === "2026-12-31") {
   fail("Production term must not use V0 placeholder dates 2026-09-01 / 2026-12-31");

@@ -18,17 +18,19 @@ export const PRODUCTION_TERM: AcademicTerm = AcademicTermSchema.parse({
   id: PRODUCTION_TERM_ID,
   name: "الفصل الدراسي الأول 2026/2027",
   startsOn: "2026-10-11",
-  endsOn: "2027-01-07",
+  endsOn: "2027-01-14",
   isCurrent: true
 });
 
 /**
  * Detect and rewrite stale academic-term records.
  *
- * Two exact signatures are eligible:
+ * Three exact signatures are eligible:
  *   1. The Foundation V0 placeholder term.
- *   2. The previously-published TTU production term whose teaching start was
- *      2026-10-04 before the official delay to 2026-10-11.
+ *   2. The previously-published TTU production term whose teaching end was
+ *      2027-01-07 before the official live-calendar update to 2027-01-14.
+ *   3. The older onboarding term whose teaching start was 2026-10-04 before
+ *      the official delay to 2026-10-11.
  *
  * The previously-published onboarding term used a generated ID, so the
  * superseded signature deliberately matches its official name and dates—not
@@ -48,7 +50,7 @@ export function migrateLegacyTerms(
 
     const isSupersededProductionTerm =
       t.name === "الفصل الدراسي الأول 2026/2027" &&
-      t.startsOn === "2026-10-04" &&
+      (t.startsOn === "2026-10-04" || t.startsOn === "2026-10-11") &&
       t.endsOn === "2027-01-07" &&
       t.isCurrent;
 
@@ -59,7 +61,11 @@ export function migrateLegacyTerms(
 
     if (isSupersededProductionTerm) {
       migrated = true;
-      return { ...t, startsOn: PRODUCTION_TERM.startsOn };
+      return {
+        ...t,
+        startsOn: PRODUCTION_TERM.startsOn,
+        endsOn: PRODUCTION_TERM.endsOn
+      };
     }
 
     return t;

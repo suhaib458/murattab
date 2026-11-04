@@ -193,9 +193,9 @@ describe("Phase 3C — legacy profile detection", () => {
 });
 
 describe("Phase 3C — production AcademicTerm", () => {
-  it("uses the revised official dates (2026-10-11 → 2027-01-07)", () => {
+  it("uses the official teaching bounds (2026-10-11 → 2027-01-14)", () => {
     expect(PRODUCTION_TERM.startsOn).toBe("2026-10-11");
-    expect(PRODUCTION_TERM.endsOn).toBe("2027-01-07");
+    expect(PRODUCTION_TERM.endsOn).toBe("2027-01-14");
   });
 
   it("uses the verified official Arabic name", () => {
@@ -230,7 +230,7 @@ describe("Phase 3C — legacy term migration", () => {
     expect(out.migrated).toBe(true);
     expect(out.terms[0].id).toBe(PRODUCTION_TERM_ID);
     expect(out.terms[0].startsOn).toBe("2026-10-11");
-    expect(out.terms[0].endsOn).toBe("2027-01-07");
+    expect(out.terms[0].endsOn).toBe("2027-01-14");
     expect(out.activeTermId).toBe(PRODUCTION_TERM_ID);
   });
 
@@ -246,7 +246,25 @@ describe("Phase 3C — legacy term migration", () => {
     expect(out.migrated).toBe(true);
     expect(out.terms[0].id).toBe(superseded.id);
     expect(out.terms[0].startsOn).toBe("2026-10-11");
-    expect(out.terms[0].endsOn).toBe(superseded.endsOn);
+    expect(out.terms[0].endsOn).toBe("2027-01-14");
+    expect(out.activeTermId).toBe(superseded.id);
+  });
+
+  it("updates only the formerly published production end date while preserving course links", () => {
+    const superseded: AcademicTerm = {
+      id: "published-term-id",
+      name: "الفصل الدراسي الأول 2026/2027",
+      startsOn: "2026-10-11",
+      endsOn: "2027-01-07",
+      isCurrent: true
+    };
+    const out = migrateLegacyTerms([superseded], superseded.id);
+    expect(out.migrated).toBe(true);
+    expect(out.terms[0]).toMatchObject({
+      id: superseded.id,
+      startsOn: "2026-10-11",
+      endsOn: "2027-01-14"
+    });
     expect(out.activeTermId).toBe(superseded.id);
   });
 
@@ -278,8 +296,8 @@ describe("Phase 3C — legacy term migration", () => {
 });
 
 describe("Phase 3C — official academic calendar", () => {
-  it("contains at least the 17 student-relevant events", () => {
-    expect(ttuAcademicCalendar.events.length).toBeGreaterThanOrEqual(17);
+  it("matches all 24 events currently published in the official table", () => {
+    expect(ttuAcademicCalendar.events).toHaveLength(24);
   });
 
   it("uses 2026-10-04 as the academic-year and faculty-work start", () => {
@@ -288,15 +306,15 @@ describe("Phase 3C — official academic calendar", () => {
     expect(ev?.startsOn).toBe("2026-10-04");
   });
 
-  it("uses 2026-10-04 → 2026-10-08 for add/drop", () => {
-    const ev = ttuAcademicCalendar.events.find((e) => e.title === "فترة السحب والإضافة");
+  it("keeps the officially combined academic-year and add/drop announcement", () => {
+    const ev = ttuAcademicCalendar.events.find((e) => e.title.startsWith("بداية العام الجامعي"));
     expect(ev).toBeDefined();
     expect(ev?.startsOn).toBe("2026-10-04");
-    expect(ev?.endsOn).toBe("2026-10-08");
+    expect(ev?.title).toContain("السحب والإضافة");
   });
 
   it("uses 2026-10-04 → 2026-10-08 for incomplete/supplementary exams", () => {
-    const ev = ttuAcademicCalendar.events.find((e) => e.title === "فترة الامتحانات التعويضية (غير المكتمل والتكميلي)");
+    const ev = ttuAcademicCalendar.events.find((e) => e.title.includes("الامتحانات التعويضية"));
     expect(ev).toBeDefined();
     expect(ev?.startsOn).toBe("2026-10-04");
     expect(ev?.endsOn).toBe("2026-10-08");
@@ -308,20 +326,20 @@ describe("Phase 3C — official academic calendar", () => {
     expect(ev?.startsOn).toBe("2026-10-11");
   });
 
-  it("uses 2027-01-07 as the last teaching day and the drop deadline", () => {
+  it("uses 2027-01-14 as the last teaching day and the drop deadline", () => {
     const lastTeaching = ttuAcademicCalendar.events.find((e) => e.title === "آخر موعد للتدريس");
-    expect(lastTeaching?.startsOn).toBe("2027-01-07");
+    expect(lastTeaching?.startsOn).toBe("2027-01-14");
     const drop = ttuAcademicCalendar.events.find((e) => e.title.startsWith("آخر موعد للانسحاب"));
-    expect(drop?.startsOn).toBe("2027-01-07");
+    expect(drop?.startsOn).toBe("2027-01-14");
   });
 
   it("contains both final exam windows (practical + theoretical)", () => {
     const practical = ttuAcademicCalendar.events.find((e) => e.title === "الامتحانات النهائية العملية والمحوسبة");
     const theoretical = ttuAcademicCalendar.events.find((e) => e.title === "الامتحانات النهائية النظرية");
-    expect(practical?.startsOn).toBe("2027-01-10");
-    expect(practical?.endsOn).toBe("2027-01-14");
-    expect(theoretical?.startsOn).toBe("2027-01-17");
-    expect(theoretical?.endsOn).toBe("2027-01-26");
+    expect(practical?.startsOn).toBe("2027-01-17");
+    expect(practical?.endsOn).toBe("2027-01-21");
+    expect(theoretical?.startsOn).toBe("2027-01-24");
+    expect(theoretical?.endsOn).toBe("2027-02-02");
   });
 
   it("contains both official holidays in this semester (Christmas + New Year)", () => {
@@ -349,13 +367,23 @@ describe("Phase 3C — official academic calendar", () => {
   it("getEventsOnDate reflects the revised October milestones", () => {
     const onAcademicYearStart = getEventsOnDate(ttuAcademicCalendar.events, "2026-10-04");
     const startTitles = onAcademicYearStart.map((e) => e.title);
-    expect(startTitles).toContain("بداية العام الجامعي وبدء دوام أعضاء هيئة التدريس");
-    expect(startTitles).toContain("فترة السحب والإضافة");
-    expect(startTitles).toContain("فترة الامتحانات التعويضية (غير المكتمل والتكميلي)");
+    expect(startTitles).toContain("بداية العام الجامعي، وبدء فترة السحب والإضافة، ومباشرة أعضاء هيئة التدريس");
+    expect(startTitles).toContain("الفترة التي تعقد فيها الامتحانات التعويضية (غير المكتمل والتكميلي)");
     expect(startTitles).not.toContain("بدء التدريس");
 
     const onTeachingStart = getEventsOnDate(ttuAcademicCalendar.events, "2026-10-11");
     expect(onTeachingStart.map((e) => e.title)).toContain("بدء التدريس");
+  });
+
+  it("includes the newly published February academic milestones", () => {
+    expect(getEventsOnDate(ttuAcademicCalendar.events, "2027-02-14").map((e) => e.title)).toEqual(expect.arrayContaining([
+      "آخر موعد لتقديم تنسيب مجالس الكليات بمنح الدرجات العلمية والشهادات إلى مجلس العمداء",
+      "فترة تقديم طلبات الانتقال من تخصص إلى آخر داخل الجامعة",
+      "بدء إجازة أعضاء الهيئة التدريسية"
+    ]));
+    expect(getEventsOnDate(ttuAcademicCalendar.events, "2027-02-17").map((e) => e.title)).toContain(
+      "قرار مجلس العمداء بمنح الدرجات العلمية والشهادات"
+    );
   });
 
   it("getEventsOnDate returns empty array when no events intersect", () => {

@@ -133,7 +133,22 @@ describe("إشعارات الجهاز", () => {
       id: "smart:calendar:2026-10-04",
       dueAt: "2026-10-03T15:00:00.000Z",
       title: "مواعيد جامعية مهمة غدًا",
-      body: "بداية العام الجامعي وبدء دوام أعضاء هيئة التدريس • فترة السحب والإضافة • فترة الامتحانات التعويضية (غير المكتمل والتكميلي)",
+      body: "بداية العام الجامعي، وبدء فترة السحب والإضافة، ومباشرة أعضاء هيئة التدريس • الفترة التي تعقد فيها الامتحانات التعويضية (غير المكتمل والتكميلي)",
+      url: "/calendar"
+    });
+  });
+
+  it("uses the updated practical-finals date for calendar reminders", () => {
+    const reminders = buildPushReminders(
+      snapshot(),
+      new Date("2027-01-14T00:00:00.000Z"),
+      { ...DEFAULT_NOTIFICATION_PREFERENCES, classReminders: false, academicCalendar: true }
+    );
+
+    expect(reminders.find((item) => item.id === "smart:calendar:2027-01-17")).toMatchObject({
+      dueAt: "2027-01-16T15:00:00.000Z",
+      title: "تنبيه امتحانات الجامعة",
+      body: "غدًا: الامتحانات النهائية العملية والمحوسبة",
       url: "/calendar"
     });
   });

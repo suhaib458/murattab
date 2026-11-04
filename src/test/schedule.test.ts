@@ -224,7 +224,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
 
   describe("توليد ملفات التقويم (ICS) وفق RFC 5545", () => {
     // Phase 3C: production first-semester 2026/2027 dates (teaching start).
-    const term = { id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-07", isCurrent: true };
+    const term = { id: termId, name: "الفصل الدراسي الأول 2026/2027", startsOn: "2026-10-11", endsOn: "2027-01-14", isCurrent: true };
     const course = {
       id: courseId,
       termId,
@@ -426,7 +426,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
       id: termId,
       name: "الفصل الدراسي الأول 2026/2027",
       startsOn: "2026-10-11",
-      endsOn: "2027-01-07",
+      endsOn: "2027-01-14",
       isCurrent: true
     };
     const boundedCourse = {
@@ -471,7 +471,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         [sunday, thursday],
         [boundedCourse],
         [boundedTerm],
-        "2027-01-07"
+        "2027-01-14"
       );
       expect(result.map((session) => session.day)).toEqual(["خ"]);
     });
@@ -482,7 +482,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
           [sunday, thursday],
           [boundedCourse],
           [boundedTerm],
-          "2027-01-10"
+        "2027-01-17"
         )
       ).toHaveLength(0);
 
@@ -501,7 +501,7 @@ describe("الجدول ومنطق المجال في مرتب", () => {
         [sunday, thursday],
         [boundedCourse],
         [boundedTerm],
-        new Date(2027, 0, 8, 8, 0, 0),
+        new Date(2027, 0, 15, 8, 0, 0),
         "08:00"
       );
       expect(next).toBeNull();
